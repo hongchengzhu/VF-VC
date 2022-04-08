@@ -1,23 +1,8 @@
-## AUTOVC: Zero-Shot Voice Style Transfer with Only Autoencoder Loss
+# VF-VC: Many-to-Many Voice Conversion based on CVAE Augmented with Flow
 
-## Checkout our new project: Global Rhythm Style Transfer Without Text Transcriptions https://github.com/auspicious3000/AutoPST
+## development proceeding
+  cvae limit to 128
 
-### Checkout our new project: Unsupervised Speech Decomposition for Rhythm, Pitch, and Timbre Conversion https://github.com/auspicious3000/SpeechSplit
-
-This repository provides a PyTorch implementation of AUTOVC.
-
-AUTOVC is a many-to-many non-parallel voice conversion framework. 
-
-If you find this work useful and use it in your research, please consider citing our paper.
-
-```
-@InProceedings{pmlr-v97-qian19c, title = {{A}uto{VC}: Zero-Shot Voice Style Transfer with Only Autoencoder Loss}, author = {Qian, Kaizhi and Zhang, Yang and Chang, Shiyu and Yang, Xuesong and Hasegawa-Johnson, Mark}, pages = {5210--5219}, year = {2019}, editor = {Kamalika Chaudhuri and Ruslan Salakhutdinov}, volume = {97}, series = {Proceedings of Machine Learning Research}, address = {Long Beach, California, USA}, month = {09--15 Jun}, publisher = {PMLR}, pdf = {http://proceedings.mlr.press/v97/qian19c/qian19c.pdf}, url = {http://proceedings.mlr.press/v97/qian19c.html} }
-```
-
-
-### Audio Demo
-
-The audio demo for AUTOVC can be found [here](https://auspicious3000.github.io/autovc-demo/)
 
 ### Dependencies
 - Python 3
@@ -28,13 +13,6 @@ The audio demo for AUTOVC can be found [here](https://auspicious3000.github.io/a
 - tqdm
 - wavenet_vocoder ```pip install wavenet_vocoder```
   for more information, please refer to https://github.com/r9y9/wavenet_vocoder
-
-### Pre-trained models
-
-| AUTOVC | Speaker Encoder | WaveNet Vocoder |
-|----------------|----------------|----------------|
-| [link](https://drive.google.com/file/d/1SZPPnWAgpGrh0gQ7bXQJXXjOntbh4hmz/view?usp=sharing)| [link](https://drive.google.com/file/d/1ORAeb4DlS_65WDkQN6LHx5dPyCM5PAVV/view?usp=sharing) | [link](https://drive.google.com/file/d/1Zksy0ndlDezo9wclQNZYkGi_6i7zi4nQ/view?usp=sharing) |
-
 
 ### 0.Convert Mel-Spectrograms
 
