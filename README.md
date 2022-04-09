@@ -1,8 +1,7 @@
 # VF-VC: Many-to-Many Voice Conversion based on CVAE Augmented with Flow
 
 ## development proceeding
-  - [ ] 4.9: non-parallel VC: CAVE limit to 128
-  - [x] 4.8: parallel VC：CVAE limit to 128
+  4.8：parallel VC：cvae limit to 128
 
 
 ### Dependencies
