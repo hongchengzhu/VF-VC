@@ -1,7 +1,7 @@
 # VF-VC: Many-to-Many Voice Conversion based on CVAE Augmented with Flow
 
 ## development proceeding
-  cvae limit to 128
+  4.8：parallel VC：cvae limit to 128
 
 
 ### Dependencies
