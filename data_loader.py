@@ -3,6 +3,8 @@ import torch
 import numpy as np
 import pickle
 import os
+import random
+import copy
 from torch.nn.utils.rnn import pad_sequence
 
 from multiprocessing import Process, Manager
@@ -22,8 +24,10 @@ class Utterances(data.Dataset):
         with open('./feature/wavlist128.txt', 'r') as f:
             dataset = f.readlines()
 
-        self.train_dataset = dataset
-        self.lens = len(self.train_dataset)
+        mel_dataset = copy.deepcopy(dataset)
+        random.shuffle(dataset)
+        self.train_dataset = [dataset, mel_dataset]
+        self.lens = len(self.train_dataset[0])
 
         # """Load data using multiprocessing"""
         # manager = Manager()
@@ -43,18 +47,25 @@ class Utterances(data.Dataset):
     def __getitem__(self, index):
         # pick a random speaker
         dataset = self.train_dataset
-        wav_index = dataset[index][:-5]
+        mel_index = dataset[0][index][:-5]
+        content_index = dataset[1][index][:-5]
 
-        # load tgt mel feature
-        tgt_mel = np.load(os.path.join(self.tgt_dir, wav_index+'.npy'))
+        # load tgt mel feature / content feature
+        tgt_mel = np.load(os.path.join(self.tgt_dir, mel_index+'.npy'))
         tgt_mel = torch.tensor(tgt_mel).to('cuda:0')
 
+        content = np.load(os.path.join(self.tgt_dir, content_index+'.npy'))
+        content = torch.tensor(content).to('cuda:0')
+
+        # limit to 128
         start_index = np.random.randint(0, tgt_mel.shape[0]-128)
         tgt_mel = tgt_mel[start_index: start_index+128, :]
 
+        content = content[start_index: start_index+128, :]
+
         # load content feature as condition
         # content = pickle.load(open(os.path.join(self.conten_dir, wav_index+'.pkl'), "rb"))
-        content = tgt_mel
+        # content = tgt_mel
         return [content, tgt_mel]
 
 

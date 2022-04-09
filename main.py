@@ -36,11 +36,12 @@ if __name__ == '__main__':
     
     # Training configuration.
     parser.add_argument('--data_dir', type=str, default='./spmel')
-    parser.add_argument('--batch_size', type=int, default=8, help='mini-batch size')
-    parser.add_argument('--num_iters', type=int, default=1000000, help='number of total iterations')
+    parser.add_argument('--batch_size', type=int, default=16, help='mini-batch size')
+    parser.add_argument('--num_iters', type=int, default=100000, help='number of total iterations')
     parser.add_argument('--len_crop', type=int, default=128, help='dataloader output sequence length')
     
     # Miscellaneous.
+    parser.add_argument('--task', type=str, default='m2m-non-parallel')
     parser.add_argument('--log_step', type=int, default=20)
 
     config = parser.parse_args()

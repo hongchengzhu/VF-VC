@@ -21,6 +21,9 @@ class Solver(object):
         # Data loader.
         self.vcc_loader = vcc_loader
 
+        # task
+        self.task = config.task
+
         # Model configurations.
         self.lambda_cd = config.lambda_cd
         self.dim_neck = config.dim_neck
@@ -39,8 +42,8 @@ class Solver(object):
 
         # Build the model and tensorboard.
         self.build_model()
-        self.writer = SummaryWriter('./log/tensorboard')
-        self.model_save = './log/model'
+        self.writer = SummaryWriter(os.path.join('./log/tensorboard', self.task))
+        self.model_save = os.path.join('./log/model', self.task)
 
         # validation
         self.validate = validation()
@@ -163,7 +166,7 @@ class Solver(object):
         val_input = self.val_output['x_recon'].transpose(1, 2)
         vc_wav = self.validate.hifigan(val_input)
 
-        name = './testwav/' + str(i) + '.wav'
+        name = os.path.join('./testwav/', self.task) + str(i) + '.wav'
         sf.write(name, vc_wav, samplerate=16000)
 
         # reconstruct
