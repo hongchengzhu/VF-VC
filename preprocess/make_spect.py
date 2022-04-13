@@ -35,7 +35,7 @@ min_level = np.exp(-100 / 20 * np.log(10))
 b, a = butter_highpass(30, 16000, order=5)
 
 # audio file directory
-rootDir = '/home/hongcz/alab/data/LJSpeech-1.1/wavs16'
+rootDir = '/home/hongcz/alab/code/VF-VC/wavs/'
 # spectrogram directory
 targetDir = '/home/hongcz/alab/feature/mel128'
 

@@ -184,7 +184,7 @@ class Generator(nn.Module):
                         encoder_type='wn', decoder_type='wn')
 
         # self.conv = torch.nn.Conv1d(80, 192, kernel_size=8, stride=4, padding=2)
-        self.conv = torch.nn.Conv1d(80, 192, kernel_size=1)
+        self.conv = torch.nn.Conv1d(768, 192, kernel_size=1)
         self.convTranspose = torch.nn.ConvTranspose1d(80, 80, kernel_size=1)
 
     def forward(self, tgt_mel, cond, loss, output, nonpadding, infer=False, noise_scale=1.0):
@@ -219,8 +219,8 @@ class Generator(nn.Module):
         else:
             z = self.fvae(cond=cond, infer=True)
         x_recon = self.fvae.decoder(z, nonpadding=nonpadding, cond=cond).transpose(1, 2)
-        output['x_recon'] = x_recon
-        output['x_recon1'] = self.convTranspose(x_recon.transpose(1, 2))
+        output['x_recon'] = x_recon * nonpadding.transpose(1, 2)    # inverse-padding: recover the origin shape
+        # output['x_recon1'] = self.convTranspose(x_recon.transpose(1, 2))
         return loss, output
 
         # autovc

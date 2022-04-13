@@ -24,13 +24,6 @@ class Solver(object):
         # task
         self.task = config.task
 
-        # Model configurations.
-        self.lambda_cd = config.lambda_cd
-        self.dim_neck = config.dim_neck
-        self.dim_emb = config.dim_emb
-        self.dim_pre = config.dim_pre
-        self.freq = config.freq
-
         # Training configurations.
         self.batch_size = config.batch_size
         self.num_iters = config.num_iters
@@ -47,17 +40,13 @@ class Solver(object):
 
         # validation
         self.validate = validation()
-        self.val_mel = torch.tensor(np.load('./feature/mel/LJ001-0001.npy')).to(self.device).unsqueeze(0)
+        self.val_mel = torch.tensor(np.load('./feature/mel_s3prl/LJ001-0001.npy')).to(self.device).unsqueeze(0)
         self.val_content = pickle.load(open('./feature/wav2vec2/LJ001-0001.pkl', "rb")).unsqueeze(0)
-        self.val_content_padding = torch.zeros([1, self.val_mel.shape[1], 768]).to(self.device)
-        self.val_content_padding[:, :self.val_content.shape[1], :] = self.val_content
-        # self.val_nonpadding = torch.zeros(self.val_mel.shape).to(self.device)
-        # self.val_nonpadding = torch.mean(self.val_nonpadding.transpose(1, 2), 1, keepdim=True)
-        self.val_nonpadding = torch.ones([1, 1, 128]).to(self.device)
         self.val_loss = {}
         self.val_output = {}
-        self.writer.add_image('GT LJ001-0001', self.val_mel.transpose(1, 2)[:, :, 128:256])
-        self.writer.add_audio('GT LJ001-0001.wav', torch.tensor(sf.read('./wavs/LJ001-0001.wav')[0]).to(self.device), sample_rate=16000)
+        self.writer.add_image('GT LJ001-0001', self.val_mel.transpose(1, 2))
+        self.writer.add_audio('GT LJ001-0001.wav', torch.tensor(sf.read('./wavs/LJ001-0001.wav')[0]).to(self.device),
+                              sample_rate=16000)
             
     def build_model(self):
 
@@ -71,7 +60,10 @@ class Solver(object):
         self.g_optimizer.zero_grad()
 
     def mse_loss(self, input_a, input_b, nonpadding):
-        return torch.square(input_a - input_b).sum() / sum(nonpadding[nonpadding == 1])
+        return torch.square(input_a - input_b).sum() / (80 * sum(nonpadding[nonpadding == 1]))
+
+    def l1_loss(self, input_a, input_b, nonpadding):
+        return torch.abs_(input_a - input_b).sum() / (80 * sum(nonpadding[nonpadding == 1]))
 
     def spec_show(self, x):
         # x = x.unsqueeze(0)
@@ -81,6 +73,7 @@ class Solver(object):
         # plt.xlabel('Time(s)')
         # plt.title('Mel Spectrogram')
         plt.show()
+
 
     #=====================================================================================================================================#
 
@@ -115,11 +108,11 @@ class Solver(object):
             self.G = self.G.train()
 
             # import f-vae
-            self.spec_show(tgt_mel[0])
+            # self.spec_show(tgt_mel[0])
             loss, output = self.G(tgt_mel.transpose(1, 2), cond=content, loss=loss, output=output, nonpadding=nonpadding)
-            loss['recon'] = self.mse_loss(output['x_recon'].transpose(1, 2), tgt_mel, nonpadding)
+            loss['recon'] = self.l1_loss(output['x_recon'].transpose(1, 2), tgt_mel, nonpadding)
             # so far, loss includes: reconstruction L1 loss and kl loss
-            total_loss = 3 * loss['kl'] + 10 * loss['recon']
+            total_loss = loss['kl'] + loss['recon']
             self.reset_grad()
             total_loss.backward()
             self.g_optimizer.step()
@@ -159,14 +152,30 @@ class Solver(object):
         # model.to(self.device)
         # model.eval()
 
-        self.val_loss, self.val_output = self.G(self.val_mel[:, 128:256, :], cond=self.val_mel[:, 128:256, :],
+        # pad because ConvTranspose
+        tag = self.val_mel.shape[1] % 4
+        if tag != 0:
+            val_mel_padding = torch.zeros([1, self.val_mel.shape[1] + (4 - tag), 80]).to(self.device)
+            val_content_padding = torch.zeros([1, self.val_content.shape[1] + (4 - tag), 768]).to(self.device)
+
+            val_mel_padding[:, :self.val_mel.shape[1], :] = self.val_mel
+            val_content_padding[:, :self.val_content.shape[1], :] = self.val_content
+
+            val_nonpadding = (val_mel_padding.transpose(1, 2) != 0).float()[:, :]
+            val_nonpadding_mean = torch.mean(val_nonpadding, 1, keepdim=True)
+            val_nonpadding_mean[val_nonpadding_mean > 0] = 1
+
+        self.val_loss, self.val_output = self.G(val_mel_padding, cond=val_content_padding,
                                                 loss=self.val_loss, output=self.val_output,
-                                                nonpadding=self.val_nonpadding, infer=True)
+                                                nonpadding=val_nonpadding_mean, infer=True)
         # self.val_output = output
         val_input = self.val_output['x_recon'].transpose(1, 2)
-        vc_wav = self.validate.hifigan(val_input)
+        # inverse pad: recover
+        val_real_input = torch.zeros([1, 80, val_input.shape[-1] - tag]).to(self.device)
+        val_real_input = val_input[:, :, :val_input.shape[-1] - tag]
+        vc_wav = self.validate.hifigan(val_real_input)
 
-        name = os.path.join('./testwav/', self.task) + str(i) + '.wav'
+        name = os.path.join(os.path.join('./testwav/', self.task), str(i) + '.wav')
         sf.write(name, vc_wav, samplerate=16000)
 
         # reconstruct
