@@ -13,7 +13,7 @@ class validation(object):
         """
         self.config = {}
         # hifigan
-        self.hifigan_checkpoint = '/home/hongcz/alab/code/VF-VC/checkpoint/hifigan/g_03280000'
+        self.hifigan_checkpoint = './checkpoint/hifigan/g_03280000'
 
         self.config_file = os.path.join(os.path.split(self.hifigan_checkpoint)[0], 'config.json')
         with open(self.config_file) as f:
@@ -26,7 +26,7 @@ class validation(object):
 
         if torch.cuda.is_available():
             torch.cuda.manual_seed(self.h.seed)
-            self.device = torch.device('cuda')
+            self.device = torch.device('cuda:0')
         else:
             self.device = torch.device('cpu')
 

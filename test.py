@@ -35,25 +35,32 @@ from model_vc import Generator
 # sf.write(name, vc_wav, samplerate=16000)
 
 
+# re-wav
+tgt_mel = torch.tensor(np.load('/home/hongcz/alab/feature/mel_s3prl/LJ001-0001.npy')).to('cuda:0').unsqueeze(0)
+hifigan = validation()
+tgt_wav = hifigan.hifigan(tgt_mel.transpose(1, 2))
+sf.write('tgt_s3prl_320.wav', tgt_wav, samplerate=16000)
+# tgt_wav, _ = sf.read('./wavs/LJ001-0001.wav')
+plt.specgram(tgt_wav, NFFT=320, Fs=16000, window=np.hanning(320))
+plt.title('tgt_s3prl_320.wav')
+plt.ylabel('Frequency')
+plt.xlabel('Time(s)')
+plt.show()
+plt.savefig('tgt_s3prl_320.wav.png')
 
-#
-# tgt_mel = torch.tensor(np.load('./feature/mel/LJ001-0001.npy')).to('cuda:0').unsqueeze(0)
-# tgt_mel = tgt_mel[:, 128:256:, ]
-#
-# hifigan = validation()
-# tgt_wav = hifigan.hifigan(tgt_mel.transpose(1, 2))
-# sf.write('tgt.wav', tgt_wav, samplerate=16000)
-
-path = "./wavs/LJ001-0001.wav"
-path = './t.wav'
-task = 'm2m-non-parallel'
+# path = "./wavs/LJ001-0001.wav"
+# path = './t.wav'
+# task = 'm2m-non-parallel'
 # path = '/home/hongcz/桌面/individualAudio.wav'
 
+# show mel
+p = np.load('/home/hongcz/alab/feature/mel128/LJ001-0001.npy')
+p = p.T
+plt.imshow(p.transpose(0, 1))
+plt.show()
+plt.savefig('tgt_mel128.wav.png')
 
-# p = np.load(open('./spmel_autovc/p225/p225_003.npy', 'rb'))
-# p = p.T
-# plt.imshow(p.transpose(0,1))
-# plt.show()
+
 
 wavlist = os.listdir(os.path.join('./testwav', task))
 
