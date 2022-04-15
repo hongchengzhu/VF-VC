@@ -27,7 +27,7 @@ class Solver(object):
         # Training configurations.
         self.batch_size = config.batch_size
         self.num_iters = config.num_iters
-        
+
         # Miscellaneous.
         self.use_cuda = torch.cuda.is_available()
         self.device = torch.device('cuda:0' if self.use_cuda else 'cpu')
@@ -47,13 +47,14 @@ class Solver(object):
         self.writer.add_image('GT LJ001-0001', self.val_mel.transpose(1, 2))
         self.writer.add_audio('GT LJ001-0001.wav', torch.tensor(sf.read('./wavs/LJ001-0001.wav')[0]).to(self.device),
                               sample_rate=16000)
-            
+
     def build_model(self):
 
         # self.G = Generator(self.dim_neck, self.dim_emb, self.dim_pre, self.freq)
-        self.G = Generator()
+        self.G = Generator().to(self.device)
         self.g_optimizer = torch.optim.Adam(self.G.parameters(), 0.0001)
-        self.G.to(self.device)
+        checkpoint = torch.load('./log/model/w2m-non-parallel/VF-VC_VAE_59989.ckpt')
+        self.G.load_state_dict(checkpoint)
 
     def reset_grad(self):
         """Reset the gradient buffers."""
@@ -74,8 +75,7 @@ class Solver(object):
         # plt.title('Mel Spectrogram')
         plt.show()
 
-
-    #=====================================================================================================================================#
+    # =====================================================================================================================================#
 
     def train(self):
         # Set data loader.
@@ -84,7 +84,7 @@ class Solver(object):
         # define loss and output
         loss = {}
         output = {}
-            
+
         # Start training.
         print('Start training...')
         start_time = time.time()
@@ -104,12 +104,13 @@ class Solver(object):
             # =================================================================================== #
             #                               2. Train the generator                                #
             # =================================================================================== #
-            
+
             self.G = self.G.train()
 
             # import f-vae
             # self.spec_show(tgt_mel[0])
-            loss, output = self.G(tgt_mel.transpose(1, 2), cond=content, loss=loss, output=output, nonpadding=nonpadding)
+            loss, output = self.G(tgt_mel.transpose(1, 2), cond=content, loss=loss, output=output,
+                                  nonpadding=nonpadding)
             loss['recon'] = self.l1_loss(output['x_recon'].transpose(1, 2), tgt_mel, nonpadding)
             # so far, loss includes: reconstruction L1 loss and kl loss
             total_loss = loss['kl'] + loss['recon']
@@ -122,11 +123,11 @@ class Solver(object):
             # =================================================================================== #
 
             # Print out training information and add to tensorboard.
-            if (i+1) % self.log_step == 0:
+            if (i + 1) % self.log_step == 0:
                 # print out training information
                 et = time.time() - start_time
                 et = str(datetime.timedelta(seconds=et))[:-7]
-                log = "Elapsed [{}], Iteration [{}/{}]".format(et, i+1, self.num_iters)
+                log = "Elapsed [{}], Iteration [{}/{}]".format(et, i + 59990, self.num_iters)
                 # for tag in keys:
                 for tag in loss:
                     log += ", {}: {:.4f}".format(tag, loss[tag])
@@ -139,10 +140,9 @@ class Solver(object):
             if i % 200 == 0:
                 self.validating(i)
 
-
             # save training model
             if i % 4999 == 0:
-                model_name = 'VF-VC_VAE_' + '{}'.format(i+1) + '.ckpt'
+                model_name = 'VF-VC_VAE_' + '{}'.format(i + 59990) + '.ckpt'
                 torch.save(self.G.state_dict(), os.path.join(self.model_save, model_name))
 
     def validating(self, i):
@@ -175,11 +175,11 @@ class Solver(object):
         val_real_input = val_input[:, :, :val_input.shape[-1] - tag]
         vc_wav = self.validate.hifigan(val_real_input)
 
-        name = os.path.join(os.path.join('./testwav/', self.task), str(i) + '.wav')
+        name = os.path.join(os.path.join('./testwav/', self.task), str(i+59990) + '.wav')
         sf.write(name, vc_wav, samplerate=16000)
 
         # reconstruct
-        self.writer.add_image('RC 001.wav', val_input, i+1)
+        self.writer.add_image('RC 001.wav', val_real_input, i + 59990)
         self.writer.add_audio('RC 001.wav',
-                              vc_wav, i+1, sample_rate=16000)
+                              vc_wav, i + 59990, sample_rate=16000)
 
