@@ -3,9 +3,7 @@ import pickle
 from model_vc import Generator
 import torch
 import numpy as np
-import torch.nn.functional as F
 import time
-import librosa.display
 import matplotlib.pyplot as plt
 import datetime
 import soundfile as sf
@@ -15,45 +13,63 @@ from vc_validation import validation
 
 class Solver(object):
 
-    def __init__(self, vcc_loader, config):
+    def __init__(self, vcc_loader, validation_loader, config):
         """Initialize configurations."""
 
         # Data loader.
         self.vcc_loader = vcc_loader
+        self.validation_loader = validation_loader
+        self.training_batch_size = config['training_batch_size']
+        self.validation_batch_size = config['validation_batch_size']
 
         # task
-        self.task = config.task
+        self.task = config['task']
+        self.use_prior_flow = config['use_prior_flow']
+        self.use_post_flow = config['use_post_flow']
+        self.train_flag = False
+
+        # continue to train or not
+        self.continue_to_train = config['continue_to_train']
+        self.iter = 0
 
         # Training configurations.
-        self.batch_size = config.batch_size
-        self.num_iters = config.num_iters
+        self.num_iters = config['num_iter']
         
         # Miscellaneous.
         self.use_cuda = torch.cuda.is_available()
-        self.device = torch.device('cuda:0' if self.use_cuda else 'cpu')
-        self.log_step = config.log_step
+        self.device = torch.device(config['device'] if self.use_cuda else 'cpu')
+        self.log_step = config['log_step']
 
         # Build the model and tensorboard.
-        self.build_model()
-        self.writer = SummaryWriter(os.path.join('./log/tensorboard', self.task))
-        self.model_save = os.path.join('./log/model', self.task)
+        self.build_model(config)
+        if not os.path.exists(os.path.join(config['log_event'], self.task)):
+            os.mkdir(os.path.join(config['log_event'], self.task))
+        self.writer = SummaryWriter(os.path.join(config['log_event'], self.task))
+        if not os.path.exists(os.path.join(config['log_model'], self.task)):
+            os.mkdir(os.path.join(config['log_model'], self.task))
+        self.model_save = os.path.join(config['log_model'], self.task)
+
+        # whether to begin to train post_flow
+        self.begin_post_flow = config['post_glow_training_start']
 
         # validation
-        self.validate = validation()
-        self.val_mel = torch.tensor(np.load('./feature/mel_s3prl/LJ001-0001.npy')).to(self.device).unsqueeze(0)
-        self.val_content = pickle.load(open('./feature/wav2vec2/LJ001-0001.pkl', "rb"))
-        self.val_loss = {}
-        self.val_output = {}
-        self.writer.add_image('GT LJ001-0001', self.val_mel.transpose(1, 2))
-        self.writer.add_audio('GT LJ001-0001.wav', torch.tensor(sf.read('./wavs/LJ001-0001.wav')[0]).to(self.device),
-                              sample_rate=16000)
-            
-    def build_model(self):
+        if config['is_training']:
+            self.validate = validation()
+            self.writer.add_figure('GT/LJ001-0001', self.plot_spectrogram(np.load('./feature/mel_hifigan/LJ001-0001.npy')))
+            self.writer.add_audio('GT/LJ001-0001.wav', torch.tensor(sf.read('./wavs/LJ001-0001.wav')[0]).to(self.device),
+                                  sample_rate=16000)
 
-        # self.G = Generator(self.dim_neck, self.dim_emb, self.dim_pre, self.freq)
-        self.G = Generator()
-        self.g_optimizer = torch.optim.Adam(self.G.parameters(), 0.0001)
+    def build_model(self, config):
+        self.G = Generator(config)
+        if self.continue_to_train is True:
+            checkpoint = torch.load(config['load_model'], map_location={'cuda:1':'cuda:0'})
+            self.G.load_state_dict(checkpoint)
+            self.iter = config['iter'] + 1
         self.G.to(self.device)
+        self.g_optimizer1 = torch.optim.Adam(self.G.parameters(), lr=0.0002, betas=(0.9, 0.98), eps=1e-08, weight_decay=0)
+        self.g_optimizer2 = torch.optim.Adam(self.G.post_flow.parameters(), lr=0.001, betas=(0.9, 0.98),
+                                             eps=1e-08, weight_decay=0)
+        self.g_optimizer = self.g_optimizer1
 
     def reset_grad(self):
         """Reset the gradient buffers."""
@@ -65,15 +81,18 @@ class Solver(object):
     def l1_loss(self, input_a, input_b, nonpadding):
         return torch.abs_(input_a - input_b).sum() / (80 * sum(nonpadding[nonpadding == 1]))
 
-    def spec_show(self, x):
-        # x = x.unsqueeze(0)
-        x = x.cpu().numpy()
-        plt.imshow(x)
-        # plt.ylabel('Mel Frequency')
-        # plt.xlabel('Time(s)')
-        # plt.title('Mel Spectrogram')
-        plt.show()
+    def plot_spectrogram(self, spectrogram):
+        if not spectrogram.shape[0] == 80:
+            spectrogram = spectrogram.T
+        fig, ax = plt.subplots(figsize=(10, 2))
+        im = ax.imshow(spectrogram, aspect="auto", origin="lower",
+                       interpolation='none')
+        plt.colorbar(im, ax=ax)
 
+        fig.canvas.draw()
+        plt.close()
+
+        return fig
 
     #=====================================================================================================================================#
 
@@ -88,31 +107,49 @@ class Solver(object):
         # Start training.
         print('Start training...')
         start_time = time.time()
-        for i in range(self.num_iters):
+        epoch = 1
+        start_iter = 0
+        if self.continue_to_train:
+            epoch = self.iter // 204
+            start_iter = self.iter
+        for i in range(start_iter, self.num_iters, 1):
 
             # =================================================================================== #
             #                             1. Preprocess input data                                #
             # =================================================================================== #
 
             # Fetch data.
-            try:
-                content, tgt_mel = next(data_iter)
-            except:
-                data_iter = iter(data_loader)
-                content, tgt_mel, nonpadding = next(data_iter)
+            # try:
+            #     content, tgt_mel = next(data_iter)
+            # except:
+            data_iter = iter(data_loader)
+            content, tgt_mel, nonpadding = next(data_iter)
+            content = content.to(self.device)
+            tgt_mel = tgt_mel.to(self.device)
+            nonpadding = nonpadding.to(self.device)
 
             # =================================================================================== #
             #                               2. Train the generator                                #
             # =================================================================================== #
-            
+
             self.G = self.G.train()
 
+            if self.begin_post_flow == i:
+                self.g_optimizer = self.g_optimizer2
+                self.train_flag = True
+
             # import f-vae
-            # self.spec_show(tgt_mel[0])
-            loss, output = self.G(tgt_mel.transpose(1, 2), cond=content, loss=loss, output=output, nonpadding=nonpadding)
-            loss['recon'] = self.l1_loss(output['x_recon'].transpose(1, 2), tgt_mel, nonpadding)
+            loss, output = self.G(tgt_mel.transpose(1, 2), cond=content,
+                                  loss=loss, output=output, nonpadding=nonpadding, train_flag=self.train_flag)
+
+            loss['recon_vae'] = self.l1_loss(output['recon_vae'].transpose(1, 2), tgt_mel, nonpadding)
+
             # so far, loss includes: reconstruction L1 loss and kl loss
-            total_loss = loss['kl'] + loss['recon']
+            if self.use_post_flow and self.train_flag:
+                total_loss = loss['postflow']
+            else:
+                total_loss = loss['kl'] + loss['recon_vae']
+
             self.reset_grad()
             total_loss.backward()
             self.g_optimizer.step()
@@ -122,64 +159,84 @@ class Solver(object):
             # =================================================================================== #
 
             # Print out training information and add to tensorboard.
-            if (i+1) % self.log_step == 0:
+            if i == 0 or (i+1) % self.log_step == 0:
                 # print out training information
                 et = time.time() - start_time
                 et = str(datetime.timedelta(seconds=et))[:-7]
-                log = "Elapsed [{}], Iteration [{}/{}]".format(et, i+1, self.num_iters)
+                log = "Elapsed [{}], Epoch [{}], Iteration [{}/{}]".format(et, epoch, i+1, self.num_iters)
                 # for tag in keys:
                 for tag in loss:
                     log += ", {}: {:.4f}".format(tag, loss[tag])
                 print(log)
                 # add to tensorboard
-                self.writer.add_scalar('kl loss', loss['kl'], i)
-                self.writer.add_scalar('l1 loss', loss['recon'], i)
+                if not self.train_flag:
+                    self.writer.add_scalar('training/kl loss', loss['kl'], i+1)
+                self.writer.add_scalar('training/l1 loss', loss['recon_vae'], i+1)
+                if self.use_post_flow and self.train_flag:
+                    self.writer.add_scalar('training/postflow loss', loss['postflow'], i + 1)
+                # print(self.g_optimizer)
 
             # add to validation audio to tensorboard
-            if i % 200 == 0:
-                self.validating(i)
-
+            if i == 0 or (i+1) % 1000 == 0:
+                self.validating(i, self.train_flag)
 
             # save training model
-            if i % 4999 == 0:
-                model_name = 'VF-VC_VAE_' + '{}'.format(i+1) + '.ckpt'
+            if i == 0 or (i+1) % 5000 == 0:
+                model_name = 'model' + '{}'.format(i+1) + '.ckpt'
                 torch.save(self.G.state_dict(), os.path.join(self.model_save, model_name))
+                print('saving model at {} step'.format(i+1))
 
-    def validating(self, i):
-        # x.transpose(1, 2)
-        # model = Generator()
-        # model.load_state_dict(torch.load('./log/model/VF-VC_VAE_5000.ckpt'))
-        # model.to(self.device)
-        # model.eval()
+            if (i+1) % 204 == 0:
+                epoch += 1
 
-        # pad because ConvTranspose
-        tag = self.val_mel.shape[1] % 4
-        if tag != 0:
-            val_mel_padding = torch.zeros([1, self.val_mel.shape[1] + (4 - tag), 80]).to(self.device)
-            val_content_padding = torch.zeros([1, self.val_content.shape[1] + (4 - tag), 768]).to(self.device)
+    def validating(self, i, train_flag):
+        # load data
+        data_iter = iter(self.validation_loader)
+        val_content, val_mel, val_nonpadding = next(data_iter)
 
-            val_mel_padding[:, :self.val_mel.shape[1], :] = self.val_mel
-            val_content_padding[:, :self.val_content.shape[1], :] = self.val_content
+        val_content = val_content.to(self.device)
+        val_mel = val_mel.to(self.device)
+        val_nonpadding = val_nonpadding.to(self.device)
 
-            val_nonpadding = (val_mel_padding.transpose(1, 2) != 0).float()[:, :]
-            val_nonpadding_mean = torch.mean(val_nonpadding, 1, keepdim=True)
-            val_nonpadding_mean[val_nonpadding_mean > 0] = 1
+        # loss and output
+        val_loss = {}
+        val_output = {}
 
-        self.val_loss, self.val_output = self.G(val_mel_padding, cond=val_content_padding,
-                                                loss=self.val_loss, output=self.val_output,
-                                                nonpadding=val_nonpadding_mean, infer=True)
-        # self.val_output = output
-        val_input = self.val_output['x_recon'].transpose(1, 2)
-        # inverse pad: recover
-        val_real_input = torch.zeros([1, 80, val_input.shape[-1] - tag]).to(self.device)
-        val_real_input = val_input[:, :, :val_input.shape[-1] - tag]
-        vc_wav = self.validate.hifigan(val_real_input)
+        # validation
+        val_loss, val_output = self.G(val_mel.transpose(1, 2), cond=val_content,
+                                      loss=val_loss, output=val_output,
+                                      nonpadding=val_nonpadding, infer=True, train_flag=train_flag)
 
-        name = os.path.join(os.path.join('./testwav/', self.task), str(i) + '.wav')
-        sf.write(name, vc_wav, samplerate=16000)
+        # compute l1 loss for 3 outputs
+        if self.use_post_flow and train_flag:
+            val_loss['recon_post_flow'] = self.l1_loss(val_output['recon_post_flow'].transpose(1, 2),
+                                                       val_mel, val_nonpadding)
+        val_loss['recon_vae'] = self.l1_loss(val_output['recon_vae'].transpose(1, 2),
+                                             val_mel, val_nonpadding)
 
-        # reconstruct
-        self.writer.add_image('RC 001.wav', val_input, i+1)
-        self.writer.add_audio('RC 001.wav',
-                              vc_wav, i+1, sample_rate=16000)
+        # add to tensorboard
+        self.writer.add_scalar('validation/recon_vae loss', val_loss['recon_vae'], i + 1)
+        if self.use_post_flow and train_flag:
+            self.writer.add_scalar('validation/recon_post_flow loss', val_loss['recon_post_flow'], i + 1)
+
+        # choose LJ001-0001.wav as show audio, [80, 604]
+        output_vae = val_output['recon_vae'].transpose(1, 2)
+        if self.use_post_flow and train_flag:
+            output_post_flow = val_output['recon_post_flow'].transpose(1, 2)
+            val_mel_input = torch.cat([output_vae, output_post_flow], dim=0)
+        else:
+            val_mel_input = output_vae
+
+        #   # add mel-spectrogram to tensorboard
+        self.writer.add_figure('RC_vae LJ001-0001.wav',
+                               self.plot_spectrogram(val_mel_input[0][:, :-2].squeeze(0).detach().cpu().numpy()), i+1)
+        if self.use_post_flow and train_flag:
+            self.writer.add_figure('RC_post_flow LJ001-0001.wav',
+                                   self.plot_spectrogram(val_mel_input[1][:, :-2].squeeze(0).detach().cpu().numpy()), i+1)
+
+        #   # add audio to tensorboard
+        val_wav = self.validate.hifigan(val_mel_input[:, :, :-2])
+        self.writer.add_audio('RC_vae 001.wav', val_wav[0], i+1, sample_rate=16000)
+        if self.use_post_flow and train_flag:
+            self.writer.add_audio('RC_post_flow 001.wav', val_wav[1], i+1, sample_rate=16000)
 

@@ -13,7 +13,7 @@ class validation(object):
         """
         self.config = {}
         # hifigan
-        self.hifigan_checkpoint = './checkpoint/hifigan/g_03280000'
+        self.hifigan_checkpoint = '/home/hongcz/alab/code/hifi_gan_master/cp_hifigan/g_00445000'
 
         self.config_file = os.path.join(os.path.split(self.hifigan_checkpoint)[0], 'config.json')
         with open(self.config_file) as f:
@@ -51,10 +51,14 @@ class validation(object):
             # x = torch.unsqueeze(x, dim=-1)
             # x = x.permute(2, 1, 0)
             y_g_hat = self.generator(x)
-            audio = y_g_hat.squeeze()
-            audio = audio.view(-1).cpu().numpy().astype('float')
+            audio = y_g_hat
+            audio_output = []
+            for i in audio:
+                i = i.view(-1).cpu().numpy().astype('float')
+                audio_output.append(i)
+            # audio = audio.view(-1).cpu().numpy().astype('float')
 
-        return audio
+        return audio_output
 
     def forawrd(self, x):
         self.hifigan(x)

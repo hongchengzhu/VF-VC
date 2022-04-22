@@ -3,9 +3,9 @@ import torch
 import numpy as np
 import pickle
 import os
-import random
-import copy
+from tqdm import tqdm
 from torch.nn.utils.rnn import pad_sequence
+import time
 
 from multiprocessing import Process, Manager
 
@@ -24,56 +24,24 @@ class Utterances(data.Dataset):
         with open(config['training_data_list'], 'r') as f:
             dataset = f.readlines()
 
-        # mel_dataset = copy.deepcopy(dataset)
-        # random.shuffle(dataset)
-
         mel_dataset = []
         content_dataset = []
-        for i in sorted(dataset):
-            mel_dataset.append(os.path.join(self.mel_dir, i[:-1] + '.npy'))
-            content_dataset.append(os.path.join(self.conten_dir, i[:-1] + '.pkl'))
+        for i in tqdm(sorted(dataset)):
+            # mel_dataset.append(os.path.join(self.mel_dir, i[:-1] + '.npy'))
+            # content_dataset.append(os.path.join(self.conten_dir, i[:-1] + '.pkl'))
+            mel_dataset.append(torch.FloatTensor(np.load(os.path.join(self.mel_dir, i[:-1] + '.npy'))))
+            content_dataset.append(pickle.load(open(os.path.join(self.conten_dir, i[:-1] + '.pkl'), 'rb')))
         self.train_dataset = [mel_dataset, content_dataset]
         self.lens = len(self.train_dataset[0])
-
-        # """Load data using multiprocessing"""
-        # manager = Manager()
-        # # meta = manager.list(meta)
-        # dataset = manager.list([])
-        # processes = []
-        # for i in range(0, len(meta), self.step):
-        #     p = Process(target=self.load_data,
-        #                 args=(meta[i:i + self.step], mel_list[i:i+self.step], dataset, i))
-        #     p.start()
-        #     processes.append(p)
-        # for p in processes:
-        #     p.join()
 
         print('Finished loading the training dataset...')
 
     def __getitem__(self, index):
         # pick a random speaker
         dataset = self.train_dataset
-        mel_index = dataset[0][index]
-        content_index = dataset[1][index]
+        tgt_mel = dataset[0][index]
+        content = dataset[1][index]
 
-        # load tgt mel feature / content feature
-        # tgt_mel = np.load(os.path.join(self.tgt_dir, mel_index+'.npy'))
-        tgt_mel = np.load(mel_index)
-        tgt_mel = torch.tensor(tgt_mel)
-
-        # content = np.load(os.path.join(self.tgt_dir, content_index+'.npy'))
-        # content = torch.tensor(content).to('cuda:0')
-        content = pickle.load(open(content_index, 'rb'))
-
-        # # limit to 128
-        # start_index = np.random.randint(0, tgt_mel.shape[0]-128)
-        # tgt_mel = tgt_mel[start_index: start_index+128, :]
-        #
-        # content = content[start_index: start_index+128, :]
-
-        # load content feature as condition
-        # content = pickle.load(open(os.path.join(self.conten_dir, wav_index+'.pkl'), "rb"))
-        # content = tgt_mel
         return [content.squeeze(0), tgt_mel]
 
     def __len__(self):
@@ -93,7 +61,6 @@ def collate_fn_vf_vc(dataset):
     mel_padding = pad_sequence(mel, padding_value=0).permute(1, 2, 0)
 
     # pad because the ConvTranspose
-
     nonpadding = (mel_padding != 0).float()[:, :]
     nonpadding_mean = torch.mean(nonpadding, 1, keepdim=True)
     nonpadding_mean[nonpadding_mean > 0] = 1
@@ -118,7 +85,7 @@ def get_loader(config, num_workers=0):
     data_loader = data.DataLoader(dataset=dataset,
                                   batch_size=config['training_batch_size'],
                                   shuffle=True,
-                                  num_workers=16,
+                                  num_workers=1,
                                   drop_last=False,
                                   worker_init_fn=None,
                                   collate_fn=collate_fn_vf_vc)
@@ -142,28 +109,23 @@ class validation_Utterances(data.Dataset):
         with open(config['validation_data_list'], 'r') as f:
             dataset = f.readlines()
 
-        # mel_dataset = copy.deepcopy(dataset)
-        # random.shuffle(dataset)
-
         mel_dataset = []
         content_dataset = []
-        for i in sorted(dataset):
-            mel_dataset.append(os.path.join(self.mel_dir, i[:-1] + '.npy'))
-            content_dataset.append(os.path.join(self.conten_dir, i[:-1] + '.pkl'))
+        for i in tqdm(sorted(dataset)):
+            # mel_dataset.append(os.path.join(self.mel_dir, i[:-1] + '.npy'))
+            # content_dataset.append(os.path.join(self.conten_dir, i[:-1] + '.pkl'))
+            mel_dataset.append(torch.FloatTensor(np.load(os.path.join(self.mel_dir, i[:-1] + '.npy'))))
+            content_dataset.append(pickle.load(open(os.path.join(self.conten_dir, i[:-1] + '.pkl'), 'rb')))
         self.train_dataset = [mel_dataset, content_dataset]
         self.lens = len(self.train_dataset[0])
 
         print('Finished loading the validation dataset...')
 
     def __getitem__(self, index):
+        # pick a random speaker
         dataset = self.train_dataset
-        mel_index = dataset[0][index]
-        content_index = dataset[1][index]
-
-        tgt_mel = np.load(mel_index)
-        tgt_mel = torch.tensor(tgt_mel)
-
-        content = pickle.load(open(content_index, 'rb'))
+        tgt_mel = dataset[0][index]
+        content = dataset[1][index]
 
         return [content.squeeze(0), tgt_mel]
 

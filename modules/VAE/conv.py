@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from VAE.layers import LayerNorm, Embedding
+from modules.VAE.layers import LayerNorm, Embedding
 
 
 class LambdaLayer(nn.Module):

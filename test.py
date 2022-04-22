@@ -11,54 +11,44 @@ import soundfile as sf
 from model_vc import Generator
 
 
-# # inference
-# val_mel = torch.tensor(np.load('./feature/mel128/LJ001-0001.npy')).to('cuda:0').unsqueeze(0)
-# val_content = torch.tensor(np.load('./feature/mel128/p225_009_16k.npy')).to('cuda:0').unsqueeze(0)
-# validate = validation()
-# model = Generator()
-# model.load_state_dict(torch.load('./log/model/m2m-non-parallel/VF-VC_VAE_99981.ckpt'))
-# model.to('cuda:0')
-# model.eval()
-#
-# val_loss = {}
-# val_output = {}
-# val_nonpadding = torch.ones([1, 1, 128]).to('cuda:0')
-#
-# val_loss, val_output = model(None, cond=val_mel[:, 128:256, :],
-#                                         loss=val_loss, output=val_output,
-#                                         nonpadding=val_nonpadding, infer=True)
-# # self.val_output = output
-# val_input = val_output['x_recon'].transpose(1, 2)
-# vc_wav = validate.hifigan(val_input)
-#
-# name = '99981' + '.wav'
-# sf.write(name, vc_wav, samplerate=16000)
+def plot_spectrogram(spectrogram):
+    fig, ax = plt.subplots(figsize=(10, 2))
+    im = ax.imshow(spectrogram, aspect="auto", origin="lower",
+                   interpolation='none')
+    plt.colorbar(im, ax=ax)
+
+    fig.canvas.draw()
+    plt.show()
+    plt.savefig('x.png')
+    plt.close()
+
+    return fig
+
+
+# x = np.load('./feature/mel_s3prl/LJ001-0001.npy')
+# a = plot_spectrogram(x.T)
+# print(1)
 
 
 # re-wav
-tgt_mel = torch.tensor(np.load('/home/hongcz/alab/feature/mel_s3prl/LJ001-0001.npy')).to('cuda:0').unsqueeze(0)
+tgt_mel = torch.tensor(np.load('/home/hongcz/alab/feature/mel_s3prl/LJ050-0269.npy')).to('cuda:0').unsqueeze(0)
 hifigan = validation()
 tgt_wav = hifigan.hifigan(tgt_mel.transpose(1, 2))
-sf.write('tgt_s3prl_320.wav', tgt_wav, samplerate=16000)
+sf.write('0269-1.wav', tgt_wav, samplerate=16000)
+
+
 # tgt_wav, _ = sf.read('./wavs/LJ001-0001.wav')
-plt.specgram(tgt_wav, NFFT=320, Fs=16000, window=np.hanning(320))
-plt.title('tgt_s3prl_320.wav')
+plt.specgram(sf.read('inference.wav')[0], NFFT=320, Fs=16000, window=np.hanning(320))
+plt.title('inference.wav')
 plt.ylabel('Frequency')
 plt.xlabel('Time(s)')
 plt.show()
-plt.savefig('tgt_s3prl_320.wav.png')
+plt.savefig('inference.wav.png')
 
 # path = "./wavs/LJ001-0001.wav"
 # path = './t.wav'
 # task = 'm2m-non-parallel'
 # path = '/home/hongcz/桌面/individualAudio.wav'
-
-# show mel
-p = np.load('/home/hongcz/alab/feature/mel128/LJ001-0001.npy')
-p = p.T
-plt.imshow(p.transpose(0, 1))
-plt.show()
-plt.savefig('tgt_mel128.wav.png')
 
 
 

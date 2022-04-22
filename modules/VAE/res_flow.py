@@ -1,7 +1,7 @@
 import torch
 from torch import nn
-from VAE.conv import ConditionalConvBlocks
-from VAE.wavenet import WN
+from modules.VAE.conv import ConditionalConvBlocks
+from modules.wavenet import WN
 
 
 class FlipLayer(nn.Module):
