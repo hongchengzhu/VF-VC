@@ -1,0 +1,69 @@
+#################
+# config file of the model
+#################
+
+# data
+content_folder: /home/hongcz/alab/feature/wav2vec2_padding/
+mel_folder: /home/hongcz/alab/feature/mel_hifigan_padding/
+training_data_list: ./feature/wav_trainingt.txt
+validation_data_list: ./feature/wav_trainingt.txt
+
+# task
+is_training: false
+
+# device
+device: cuda:0
+
+# model
+training_batch_size: 2
+validation_batch_size: 2 # set 1 batch, sizeof 64 audios 
+num_iter: 1000000
+task: w2m-post
+log_step: 20
+
+# continue to train
+continue_to_train: false
+load_model: ./log/model/w2m-non-parallel/VF-VC_VAE_59989.ckpt
+
+# modules
+c_in_out: 80 # mel_size
+hidden_size: 192
+c_latent: 16
+kernel_size: 5
+enc_n_layers: 8
+dec_n_layers: 4
+c_cond: 192
+strides: [4]
+encoder_type: wn
+decoder_type: wn
+
+# wav2vec2 hidden size
+hidden_in: 768 # content_size
+hidden_out: 192 # hidden_size
+
+# enhanced prior
+use_prior_flow: true
+flow_hidden: 64
+flow_kernel_size: 3
+flow_n_steps: 4
+flow_n_layers: 4
+
+# log
+log_event: ./log/tensorboard
+log_model: ./log/model
+
+# post-net
+use_post_flow: false
+detach_postflow_input: true
+post_flow_lr: 0.001
+cond_hs: 272 # 80+192, use content as condition
+post_glow_hidden: 192
+post_glow_kernel_size: 3
+post_glow_n_blocks: 12
+post_glow_n_block_layers: 3
+post_share_cond_layers: false
+share_wn_layers: 4
+sigmoid_scale: false
+post_glow_training_start: 160000
+noise_scale: 0.8
+infer_post_glow: true
