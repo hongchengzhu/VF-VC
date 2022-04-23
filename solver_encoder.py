@@ -140,7 +140,7 @@ class Solver(object):
 
             # import f-vae
             loss, output = self.G(tgt_mel.transpose(1, 2), cond=content,
-                                  loss=loss, output=output, nonpadding=nonpadding, train_flag=self.train_flag)
+                                  loss=loss, output=output, nonpadding=nonpadding, train_flag=self.train_flag)      # mel:[B, T, H], content:[B, T, H], nonpadding:[B, 1, T]
 
             loss['recon_vae'] = self.l1_loss(output['recon_vae'].transpose(1, 2), tgt_mel, nonpadding)
 
@@ -220,6 +220,15 @@ class Solver(object):
             self.writer.add_scalar('validation/recon_post_flow loss', val_loss['recon_post_flow'], i + 1)
 
         # choose LJ001-0001.wav as show audio, [80, 604]
+        chosen_mel = torch.FloatTensor(np.load('/home/hongcz/alab/feature/mel_hifigan_padding_alignment/LJ001-0001.npy')).unsqueeze(0).to(self.device)
+        chosen_content = torch.FloatTensor(pickle.load(open('/home/hongcz/alab/feature/wav2vec2_padding_alignment/LJ001-0001.pkl', 'rb'))).to(self.device)
+        chosen_nonpadding = (chosen_mel.transpose(1, 2) != 0).float()[:, :].to(self.device)
+        chosen_nonpadding = torch.mean(chosen_nonpadding, 1, keepdim=True)
+        chosen_nonpadding[chosen_nonpadding > 0] = 1
+
+        val_loss, val_output = self.G(chosen_mel, cond=chosen_content, loss=val_loss, output=val_output,
+                                      nonpadding=chosen_nonpadding, infer=True, train_flag=train_flag)
+
         output_vae = val_output['recon_vae'].transpose(1, 2)
         if self.use_post_flow and train_flag:
             output_post_flow = val_output['recon_post_flow'].transpose(1, 2)
