@@ -9,15 +9,15 @@ import yaml
 
 
 # data loading...
-mel = torch.tensor(np.load('/home/hongcz/alab/feature/mel_hifigan_padding/LJ001-0001.npy')).to('cuda:0').unsqueeze(0)
-content = pickle.load(open('feature/wav2vec2/LJ001-0001.pkl', "rb")).to('cuda:0')
+mel = torch.tensor(np.load('/home/hongcz/alab/feature/mel_hifigan_padding_alignment/LJ001-0003.npy')).to('cuda:0').unsqueeze(0)
+content = pickle.load(open('/home/hongcz/alab/feature/wav2vec2_padding_alignment/LJ001-0003.pkl', "rb")).to('cuda:0')
 
 # initialize...
 # config file is in './config/config.yaml'
 with open('./config/config_infer.yaml', 'r', encoding='utf-8') as f:
     config = yaml.load(f.read(), Loader=yaml.FullLoader)
 model = Generator(config)
-model.load_state_dict(torch.load('log/model/w2m-post/model65000.ckpt', map_location={'cuda:1': 'cuda:0'}))
+model.load_state_dict(torch.load('log/model/w2m-post/model155000.ckpt', map_location={'cuda:1': 'cuda:0'}))
 model.to('cuda:0')
 model.eval()
 
@@ -44,13 +44,13 @@ real_input = input * nonpadding
 spec = real_input.detach().cpu().numpy().squeeze(0)
 plt.imshow(spec)
 plt.show()
-plt.savefig('inference_19997_no_p.wav.png')
+plt.savefig('inference_post_3_155000.wav.png')
 
 
 vc_wav = validate.hifigan(real_input)
 
-name = 'infer65000.wav'
-sf.write(name, vc_wav, samplerate=16000)
+name = 'infer_post_3_155000.wav'
+sf.write(name, vc_wav[0], samplerate=16000)
 
 
 def plot_spectrogram(spectrogram):

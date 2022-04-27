@@ -9,10 +9,14 @@ import os
 from vc_validation import validation
 import soundfile as sf
 from model_vc import Generator
+import sys
+sys.path.append('/home/hongcz/alab/code')
+print(sys.path)
+from hifi_gan_master.meldataset import mel_spectrogram
 
 
 def plot_spectrogram(spectrogram):
-    fig, ax = plt.subplots(figsize=(10, 2))
+    fig, ax = plt.subplots(figsize=(10, 2)) # mel [80,T]
     im = ax.imshow(spectrogram, aspect="auto", origin="lower",
                    interpolation='none')
     plt.colorbar(im, ax=ax)
@@ -23,6 +27,17 @@ def plot_spectrogram(spectrogram):
     plt.close()
 
     return fig
+
+
+# from wav to mel
+wav = sf.read('cmp/inference59989.wav')[0]
+x = torch.FloatTensor(wav).unsqueeze(0)
+# extract mel-spectrogram
+mel = mel_spectrogram(x, 400, 80, 16000, 320, 400, 0, 8000, center=False)
+# save spect
+# if mel.shape[0] > 128:
+mel = mel.squeeze(0).cpu().numpy().astype(np.float32)
+plot_spectrogram(mel)
 
 
 # x = np.load('./feature/mel_s3prl/LJ001-0001.npy')

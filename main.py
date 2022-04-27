@@ -1,6 +1,6 @@
 import yaml
 from solver_encoder import Solver
-from data_loader_cache import get_loader, validation_get_loader
+from data_loader import get_loader, validation_get_loader
 from torch.backends import cudnn
 
 

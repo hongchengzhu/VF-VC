@@ -53,7 +53,7 @@ log_event: ./log/tensorboard
 log_model: ./log/model
 
 # post-net
-use_post_flow: false
+use_post_flow: true
 detach_postflow_input: true
 post_flow_lr: 0.001
 cond_hs: 272 # 80+192, use content as condition

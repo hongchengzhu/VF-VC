@@ -13,7 +13,7 @@ device: cuda:0
 
 # task
 is_training: true
-iter: 65000
+iter: 155000
 
 # model
 training_batch_size: 4
@@ -24,7 +24,7 @@ log_step: 5
 
 # continue to train
 continue_to_train: true
-load_model: ./log/model/w2m-post/model65000.ckpt
+load_model: ./log/model/w2m-post/model155000.ckpt
 
 # modules
 c_in_out: 80 # mel_size
@@ -65,6 +65,6 @@ post_glow_n_block_layers: 3
 post_share_cond_layers: false
 share_wn_layers: 4
 sigmoid_scale: false
-post_glow_training_start: 65010
+post_glow_training_start: 155001
 noise_scale: 0.8
 infer_post_glow: true
