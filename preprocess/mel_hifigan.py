@@ -31,7 +31,6 @@ def mel_hifigan_extractor(index):
         # extract mel-spectrogram
         mel = mel_spectrogram(x, 400, 80, 16000, 320, 400, 0, 8000, center=False)
         # save spect
-        # if mel.shape[0] > 128:
         mel = mel.transpose(1, 2).squeeze(0).cpu().numpy().astype(np.float32)
         tag = mel.shape[0] % 4
         if tag != 0:
@@ -42,21 +41,34 @@ def mel_hifigan_extractor(index):
         tgt = os.path.join(targetDir, spk)
         if not os.path.exists(tgt):
             os.mkdir(tgt)
-        np.save(os.path.join(tgt, wavname[:-4]), mel_padding.astype('float32'), allow_pickle=False)
+        return tgt, mel_padding.astype('float32')
+        # np.save(os.path.join(tgt, wavname[:-4]), mel_padding.astype('float32'), allow_pickle=False)
 
 
-for i in range(0, 109, 4):
-    t1 = threading.Thread(target=mel_hifigan_extractor, args=(i, ))
-    t2 = threading.Thread(target=mel_hifigan_extractor, args=(i+1, ))
-    t3 = threading.Thread(target=mel_hifigan_extractor, args=(i+2, ))
-    t4 = threading.Thread(target=mel_hifigan_extractor, args=(i+3, ))
-
-    t1.start()
-    t2.start()
-    t3.start()
-    t4.start()
-
-    t1.join()
-    t2.join()
-    t3.join()
-    t4.join()
+# for i in range(0, 109, 8):
+#     t1 = threading.Thread(target=mel_hifigan_extractor, args=(i, ))
+#     t2 = threading.Thread(target=mel_hifigan_extractor, args=(i+1, ))
+#     t3 = threading.Thread(target=mel_hifigan_extractor, args=(i+2, ))
+#     t4 = threading.Thread(target=mel_hifigan_extractor, args=(i+3, ))
+#     t5 = threading.Thread(target=mel_hifigan_extractor, args=(i+4,))
+#     t6 = threading.Thread(target=mel_hifigan_extractor, args=(i+5,))
+#     t7 = threading.Thread(target=mel_hifigan_extractor, args=(i+6,))
+#     t8 = threading.Thread(target=mel_hifigan_extractor, args=(i+7,))
+#
+#     t1.start()
+#     t2.start()
+#     t3.start()
+#     t4.start()
+#     t5.start()
+#     t6.start()
+#     t7.start()
+#     t8.start()
+#
+#     t1.join()
+#     t2.join()
+#     t3.join()
+#     t4.join()
+#     t5.join()
+#     t6.join()
+#     t7.join()
+#     t8.join()
