@@ -13,7 +13,7 @@ class validation(object):
         """
         self.config = {}
         # hifigan
-        self.hifigan_checkpoint = '/home/hongcz/alab/code/hifi_gan_master/cp_hifigan/g_00445000'
+        self.hifigan_checkpoint = 'checkpoint/hifigan/g_00445000'
 
         self.config_file = os.path.join(os.path.split(self.hifigan_checkpoint)[0], 'config.json')
         with open(self.config_file) as f:
