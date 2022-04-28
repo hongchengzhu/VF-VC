@@ -106,7 +106,7 @@ class validation_Utterances(data.Dataset):
         self.spk_emb = config['spk_emb']
 
         # load utterances and decide which to load
-        with open(config['training_data_list'], 'r') as f:
+        with open(config['validation_data_list'], 'r') as f:
             dataset = f.readlines()
 
         mel_dataset = []
