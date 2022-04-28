@@ -3,7 +3,8 @@
 ## development proceeding
   - [x] 4.8：parallel VC：cvae limit to 128
   - [x] 4.27: non-parallel VC: f-vae with alignment feature in LJSpeech-1.1
-  - [ ] 4.27: non-parallel VC in multi-speaker setting
+  - [x] 4.28: non-parallel VC in multi-speaker setting
+  - [ ] VCTK training
 
 
 ### Dependencies
