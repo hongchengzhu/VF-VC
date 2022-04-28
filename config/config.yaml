@@ -1,29 +1,37 @@
 #################
-# config file of the model
+# config file of VF-VC
 #################
 
 # data
-content_folder: /home/hongcz/alab/feature/wav2vec2_padding/
-mel_folder: /home/hongcz/alab/feature/mel_hifigan_padding/
-training_data_list: ./feature/wav_trainingt.txt
-validation_data_list: ./feature/wav_trainingt.txt
+content_folder: /home/hongcz/alab/feature/wav2vec2_VCTK/
+mel_folder: /home/hongcz/alab/feature/mel_VCTK/
+spk_emb: /home/hongcz/alab/feature/speaker_embedding_VCTK
+training_data_list: ./feature/wavlist_trn_VCTK.txt
+validation_data_list: ./feature/wavlist_val_VCTK.txt
 
 # device
 device: cuda:0
+
+# validation
+gt_audio: /home/hongcz/alab/data/VCTK-Corpus/wav16
+gt_audio1: p226/p226_002 # male
+gt_audio2: p227/p227_003 # male
+gt_audio3: p228/p228_004 # female
+gt_audio4: p225/p225_001 # female
 
 # task
 is_training: true
 iter: 155000
 
 # model
-training_batch_size: 4
-validation_batch_size: 2 # set 1 batch, sizeof 64 audios 
+training_batch_size: 64
+validation_batch_size: 64 # set 1 batch, sizeof 64 audios 
 num_iter: 1000000
-task: w2m-post
+task: w2m-vctk
 log_step: 5
 
 # continue to train
-continue_to_train: true
+continue_to_train: false
 load_model: ./log/model/w2m-post/model155000.ckpt
 
 # modules
@@ -65,6 +73,6 @@ post_glow_n_block_layers: 3
 post_share_cond_layers: false
 share_wn_layers: 4
 sigmoid_scale: false
-post_glow_training_start: 155001
+post_glow_training_start: 200001
 noise_scale: 0.8
 infer_post_glow: true

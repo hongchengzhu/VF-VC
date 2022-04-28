@@ -5,12 +5,8 @@ import random
 
 def fused_add_tanh_sigmoid_multiply(input_a, input_b, n_channels):
     n_channels_int = n_channels[0]
-    if input_a.shape[-1] > input_b.shape[-1]:   # equals to padding '0'
-        input_a[:, :, :input_b.shape[-1]] = input_a[:, :, :input_b.shape[-1]] + input_b
-        in_act = input_a
-    else:
-        start_index = random.randint(0, input_a.shape[-1] - input_b.shape[-1])
-        in_act = input_a[:, :, start_index:start_index+input_b.shape[-1]] + input_b
+
+    in_act = input_a + input_b
 
     t_act = torch.tanh(in_act[:, :n_channels_int, :])
     s_act = torch.sigmoid(in_act[:, n_channels_int:, :])

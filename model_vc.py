@@ -13,6 +13,9 @@ class Generator(nn.Module):
         # transfer the content_size to hidden_size
         self.conv = torch.nn.Conv1d(config['hidden_in'], config['hidden_out'], kernel_size=1)
 
+        # transfer the speaker_embedding to hidden_size
+        self.spk_conv = torch.nn.Conv1d(256, config['hidden_out'], kernel_size=1)
+
         # import f-vae
         self.fvae = FVAE(c_in_out=config['c_in_out'], hidden_size=config['hidden_size'], c_latent=config['c_latent'],
                          kernel_size=config['kernel_size'], enc_n_layers=config['enc_n_layers'],
@@ -39,7 +42,7 @@ class Generator(nn.Module):
         self.detach_postflow_input = config['detach_postflow_input']
         self.noise_scale = config['noise_scale']
 
-    def forward(self, tgt_mel, cond, loss, output, nonpadding, train_flag=True, infer=False, noise_scale=1.0):
+    def forward(self, tgt_mel, cond, loss, output, nonpadding, spk_emb=None, train_flag=True, infer=False, noise_scale=1.0):
         """
         Content encoder & Speaker encoder (if use) as VF-VC Encoder, and the extracted representations are concated
         as the condition of modules (VF-VC Decoder) with VP-Flow enhanced. The flow-based model is used as Post-Net to
@@ -49,6 +52,7 @@ class Generator(nn.Module):
         :param loss: empty dict return loss
         :param output: empty dict return output
         :param nonpadding: [B, C, T]
+        :param spk_emb: speaker embedding in multi-speaker setting
         :param train_flag: set to True
         :param infer: train or infer
         :param noise_scale: 1.0
@@ -57,6 +61,8 @@ class Generator(nn.Module):
 
         # convert content to hidden before into vae
         cond = self.conv(cond.transpose(1, 2))  # condition with 192-dim, [B, H, T]
+        spk_emb = self.spk_conv(spk_emb.unsqueeze(-1))
+        cond = cond + spk_emb
 
         # f-vae encoder
         if not infer:

@@ -17,8 +17,7 @@ class Utterances(data.Dataset):
         """Initialize and preprocess the Utterances dataset."""
         self.conten_dir = config['content_folder']
         self.mel_dir = config['mel_folder']
-        # self.step = 10
-
+        self.spk_emb = config['spk_emb']
 
         # load utterances and decide which to load
         with open(config['training_data_list'], 'r') as f:
@@ -26,12 +25,12 @@ class Utterances(data.Dataset):
 
         mel_dataset = []
         content_dataset = []
+        speaker_embedding = []
         for i in tqdm(sorted(dataset)):
-            # mel_dataset.append(os.path.join(self.mel_dir, i[:-1] + '.npy'))
-            # content_dataset.append(os.path.join(self.conten_dir, i[:-1] + '.pkl'))
             mel_dataset.append(torch.FloatTensor(np.load(os.path.join(self.mel_dir, i[:-1] + '.npy'))))
             content_dataset.append(pickle.load(open(os.path.join(self.conten_dir, i[:-1] + '.pkl'), 'rb')))
-        self.train_dataset = [mel_dataset, content_dataset]
+            speaker_embedding.append(torch.FloatTensor(np.load(os.path.join(self.spk_emb, i[:-1] + '.npy'))))
+        self.train_dataset = [mel_dataset, content_dataset, speaker_embedding]
         self.lens = len(self.train_dataset[0])
 
         print('Finished loading the training dataset...')
@@ -41,8 +40,9 @@ class Utterances(data.Dataset):
         dataset = self.train_dataset
         tgt_mel = dataset[0][index]
         content = dataset[1][index]
+        spk_emb = dataset[2][index]
 
-        return [content.squeeze(0), tgt_mel]
+        return [content.squeeze(0), tgt_mel, spk_emb]
 
     def __len__(self):
         """
@@ -56,6 +56,7 @@ def collate_fn_vf_vc(dataset):
 
     content = [dataset[i][0] for i in range(batch_size)]
     mel = [dataset[i][1] for i in range(batch_size)]
+    spk_emb = [dataset[i][2] for i in range(batch_size)]
 
     content_padding = pad_sequence(content, padding_value=0).permute(1, 0, 2)
     mel_padding = pad_sequence(mel, padding_value=0).permute(1, 2, 0)
@@ -67,7 +68,7 @@ def collate_fn_vf_vc(dataset):
 
     # print(content_p_padding.shape, mel_p_padding.shape)
 
-    return content_padding, mel_padding, nonpadding_mean
+    return content_padding, mel_padding, nonpadding_mean, spk_emb
 
     # mel_nonpadding = torch.ones([batch_size, 1, mel_padding.shape[-1]]).to('cuda:0')
 
