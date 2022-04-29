@@ -117,7 +117,7 @@ class Solver(object):
         epoch = 1
         start_iter = 0
         if self.continue_to_train:
-            epoch = self.iter // 204
+            epoch = self.iter // 688
             start_iter = self.iter
         for i in range(start_iter, self.num_iters, 1):
 
