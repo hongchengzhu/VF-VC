@@ -28,7 +28,7 @@ training_batch_size: 64
 validation_batch_size: 64 # set 1 batch, sizeof 64 audios 
 num_iter: 1000000
 task: w2m-vctk
-log_step: 5
+log_step: 20
 
 # continue to train
 continue_to_train: false
