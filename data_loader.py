@@ -45,7 +45,6 @@ class Utterances(data.Dataset):
         content = pickle.load(open(content_index, 'rb'))
 
         spk_embed = torch.FloatTensor(np.load(spk_index))
-
         return [content.squeeze(0), tgt_mel, spk_embed]
 
     def __len__(self):
@@ -85,7 +84,7 @@ def get_loader(config, num_workers=0):
     data_loader = data.DataLoader(dataset=dataset,
                                   batch_size=config['training_batch_size'],
                                   shuffle=True,
-                                  num_workers=16,
+                                  num_workers=0,
                                   drop_last=False,
                                   worker_init_fn=None,
                                   collate_fn=collate_fn_vf_vc)
@@ -174,7 +173,7 @@ def validation_get_loader(config, num_workers=0):
     data_loader = data.DataLoader(dataset=dataset,
                                   batch_size=config['validation_batch_size'],
                                   shuffle=False,
-                                  num_workers=16,
+                                  num_workers=0,
                                   drop_last=False,
                                   worker_init_fn=None,
                                   collate_fn=validation_collate_fn_vf_vc)
