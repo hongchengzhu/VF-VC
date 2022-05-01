@@ -13,9 +13,6 @@ class Generator(nn.Module):
         # transfer the content_size to hidden_size
         self.conv = torch.nn.Conv1d(config['hidden_in'], config['hidden_out'], kernel_size=1)
 
-        # transfer the speaker_embedding to hidden_size
-        self.spk_conv = torch.nn.Conv1d(256, config['hidden_out'], kernel_size=1)
-
         # import f-vae
         self.fvae = FVAE(c_in_out=config['c_in_out'], hidden_size=config['hidden_size'], c_latent=config['c_latent'],
                          kernel_size=config['kernel_size'], enc_n_layers=config['enc_n_layers'],
@@ -60,9 +57,10 @@ class Generator(nn.Module):
         """
 
         # convert content to hidden before into vae
+        T = cond.shape[1]
+        spk_emb_padding = spk_emb.unsqueeze(1).repeat(1, T, 1)
+        cond = torch.cat([cond, spk_emb_padding], -1)
         cond = self.conv(cond.transpose(1, 2))  # condition with 192-dim, [B, H, T]
-        spk_emb = self.spk_conv(spk_emb.unsqueeze(-1))
-        cond = cond + spk_emb
 
         # f-vae encoder
         if not infer:
