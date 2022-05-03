@@ -14,7 +14,7 @@ model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
 
 # tokenize
 # input_values = processor(ds[0]["audio"]["array"], return_tensors="pt", padding="longest").input_values  # Batch size 1
-input = torch.tensor(sf.read('../inference.wav')[0], dtype=torch.float32).to('cpu').unsqueeze(0)
+input = torch.tensor(sf.read('../p225_001.wav')[0], dtype=torch.float32).to('cpu').unsqueeze(0)
 # retrieve logits
 logits = model(input).logits
 
