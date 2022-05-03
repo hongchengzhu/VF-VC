@@ -23,10 +23,10 @@ model.eval()
 
 loss = {}
 output = {}
-
+#
 validate = validation()
-
-# pad because ConvTranspose
+#
+# # pad because ConvTranspose
 tag = mel.shape[1] % 4
 # if tag != 0:
 
@@ -49,7 +49,7 @@ plt.savefig('inference_post_3_155000.wav.png')
 
 vc_wav = validate.hifigan(real_input)
 
-name = 'infer_post_3_155000.wav'
+name = ''
 sf.write(name, vc_wav[0], samplerate=16000)
 
 
