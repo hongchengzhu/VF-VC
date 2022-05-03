@@ -1,5 +1,5 @@
 import os
-import pickle
+from math import ceil
 from model_vc import Generator
 import torch
 import numpy as np
@@ -80,11 +80,11 @@ class Solver(object):
         """Reset the gradient buffers."""
         self.g_optimizer.zero_grad()
 
-    def mse_loss(self, input_a, input_b, nonpadding):
-        return torch.square(input_a - input_b).sum() / (80 * sum(nonpadding[nonpadding == 1]))
+    def mse_loss(self, input_a, input_b):
+        return torch.square(input_a - input_b).sum()
 
-    def l1_loss(self, input_a, input_b, nonpadding):
-        return torch.abs_(input_a - input_b).sum() / (80 * sum(nonpadding[nonpadding == 1]))
+    def l1_loss(self, input_a, input_b):
+        return torch.abs_(input_a - input_b).sum()
 
     def plot_spectrogram(self, spectrogram):
         if len(spectrogram.shape) == 3:
@@ -125,9 +125,9 @@ class Solver(object):
             #                             1. Preprocess input data                                #
             # =================================================================================== #
             data_iter = iter(data_loader)
-            content, tgt_mel, nonpadding, spk_emb = next(data_iter)
-            content = content.to(self.device)           # content:[B, T, H]
-            tgt_mel = tgt_mel.to(self.device)           # mel:[B, H, T]
+            src_mel, nonpadding, spk_emb = next(data_iter)
+            # content = content.to(self.device)           # content:[B, T, H]
+            src_mel = src_mel.to(self.device)           # mel:[B, H, T]
             nonpadding = nonpadding.to(self.device)     # nonpadding: [B, 1, T]
             spk_emb = spk_emb.to(self.device)           # spk_emb:[B, H]
 
@@ -141,16 +141,22 @@ class Solver(object):
                 self.train_flag = True
 
             # import f-vae
-            loss, output = self.G(tgt_mel.transpose(1, 2), cond=content, spk_emb=spk_emb,
-                                  loss=loss, output=output, nonpadding=nonpadding, train_flag=self.train_flag)      # mel:[B, T, H], content:[B, T, H], nonpadding:[B, 1, T]
+            loss, output = self.G(src_mel.transpose(1, 2), spk_emb_src=spk_emb, spk_emb_tgt=spk_emb,
+                                  loss=loss, output=output, nonpadding=nonpadding, train_flag=self.train_flag)
+            # mel:[B, T, H], content:[B, T, H], nonpadding:[B, 1, T]
+            loss['recon_vae'] = \
+                self.mse_loss(output['recon_vae'].transpose(1, 2), src_mel) / (80 * sum(nonpadding[nonpadding == 1]))
 
-            loss['recon_vae'] = self.l1_loss(output['recon_vae'].transpose(1, 2), tgt_mel, nonpadding)
+            # code loss
+            content_recon = self.G(src_mel.transpose(1, 2), spk_emb_src=spk_emb, spk_emb_tgt=None,
+                                  loss=loss, output=output, nonpadding=nonpadding, train_flag=self.train_flag)
+            loss['content_recon'] = self.mse_loss(output['content_origin'], content_recon) / content_recon.numel()
 
             # so far, loss includes: reconstruction L1 loss and kl loss
             if self.use_post_flow and self.train_flag:
                 total_loss = loss['postflow']
             else:
-                total_loss = loss['kl'] + loss['recon_vae']
+                total_loss = loss['kl'] + loss['recon_vae'] + loss['content_recon']
 
             self.reset_grad()
             total_loss.backward()
@@ -171,12 +177,13 @@ class Solver(object):
                     log += ", {}: {:.4f}".format(tag, loss[tag])
                 print(log)
                 # add to tensorboard
-                if not self.train_flag:
-                    self.writer.add_scalar('training/kl loss', loss['kl'], i+1)
-                self.writer.add_scalar('training/l1 loss', loss['recon_vae'], i+1)
+            if i == 0 or (i+1) % 250 == 0:
+                self.writer.add_scalar('training/kl loss', loss['kl'], i+1)
+                self.writer.add_scalar('training/mel_recon loss', loss['recon_vae'], i+1)
+                self.writer.add_scalar('training/content loss', loss['content_recon'], i + 1)
+
                 if self.use_post_flow and self.train_flag:
                     self.writer.add_scalar('training/postflow loss', loss['postflow'], i + 1)
-                # print(self.g_optimizer)
 
             # add to validation audio to tensorboard
             if i == 0 or (i+1) % 1000 == 0:
@@ -194,9 +201,8 @@ class Solver(object):
     def validating(self, i, train_flag):
         # load data
         data_iter = iter(self.validation_loader)
-        val_content, val_mel, val_nonpadding, spk_emb = next(data_iter)
+        val_mel, val_nonpadding, spk_emb = next(data_iter)
 
-        val_content = val_content.to(self.device)
         val_mel = val_mel.to(self.device)
         val_nonpadding = val_nonpadding.to(self.device)
         spk_emb = spk_emb.to(self.device)
@@ -206,25 +212,31 @@ class Solver(object):
         val_output = {}
 
         # validation
-        val_loss, val_output = self.G(tgt_mel=None, cond=val_content, spk_emb=spk_emb,
+        val_loss, val_output = self.G(src_mel=val_mel.transpose(1, 2), spk_emb_src=spk_emb, spk_emb_tgt=spk_emb,
                                       loss=val_loss, output=val_output,
                                       nonpadding=val_nonpadding, infer=True, train_flag=train_flag)
+        # code loss
+        content_recon = self.G(src_mel=val_mel.transpose(1, 2), spk_emb_src=spk_emb, spk_emb_tgt=None,
+                               loss=val_loss, output=val_output, nonpadding=val_nonpadding, train_flag=train_flag)
 
         # compute l1 loss for 3 outputs
         if self.use_post_flow and train_flag:
-            val_loss['recon_post_flow'] = self.l1_loss(val_output['recon_post_flow'].transpose(1, 2),
-                                                       val_mel, val_nonpadding)
-        val_loss['recon_vae'] = self.l1_loss(val_output['recon_vae'].transpose(1, 2),
-                                             val_mel, val_nonpadding)
+            val_loss['recon_post_flow'] = self.mse_loss(val_output['recon_post_flow'].transpose(1, 2),
+                                                        val_mel) / (80 * sum(val_nonpadding[val_nonpadding == 1]))
+        val_loss['recon_vae'] = self.mse_loss(val_output['recon_vae'].transpose(1, 2),
+                                              val_mel) / (80 * sum(val_nonpadding[val_nonpadding == 1]))
+        val_loss['content_recon'] = self.mse_loss(val_output['content_origin'], content_recon) / content_recon.numel()
 
         # add to tensorboard
         self.writer.add_scalar('validation/recon_vae loss', val_loss['recon_vae'], i + 1)
+        self.writer.add_scalar('validation/content_recon loss', val_loss['content_recon'], i + 1)
         if self.use_post_flow and train_flag:
             self.writer.add_scalar('validation/recon_post_flow loss', val_loss['recon_post_flow'], i + 1)
 
-        val_content, val_spk_emb, val_nonpadding, val_tag = self.val_show_dataloader()
+        val_mel_src, val_spk_emb_src, val_spk_emb_tgt, val_nonpadding, val_tag = self.val_show_dataloader()
 
-        val_loss, val_output = self.G(None, cond=val_content, loss=val_loss, output=val_output, spk_emb=val_spk_emb,
+        val_loss, val_output = self.G(src_mel=val_mel_src.transpose(1, 2), loss=val_loss, output=val_output,
+                                      spk_emb_src=val_spk_emb_src, spk_emb_tgt=val_spk_emb_tgt,
                                       nonpadding=val_nonpadding, infer=True, train_flag=train_flag)
 
         output_vae = val_output['recon_vae'].transpose(1, 2)
@@ -246,7 +258,7 @@ class Solver(object):
             self.writer.add_figure('val_mel/'+self.conf[src_spk][:4]+'->'+self.conf[tgt_spk][:4], self.plot_spectrogram(
                 val_mel_input[k-1][:, :val_tag[k-1]].detach().cpu().numpy()), i+1)
             if self.use_post_flow and train_flag:
-                self.writer.add_figure('val_mel/'+self.conf[src_spk][:4]+'->'+self.conf[tgt_spk][:4],
+                self.writer.add_figure('val_mel_postflow/'+self.conf[src_spk][:4]+'->'+self.conf[tgt_spk][:4],
                                        self.plot_spectrogram(val_mel_input[k+7][:, :val_tag[k-1]].detach().cpu().numpy()), i+1)
 
             # add audio to tensorboard
@@ -255,12 +267,13 @@ class Solver(object):
                                   i+1, sample_rate=16000)
             if self.use_post_flow and train_flag:
                 val_wav = self.validate.hifigan(val_mel_input[k+7][:, :val_tag[k-1]])
-                self.writer.add_audio('val_audio/'+self.conf[src_spk][:4]+'->'+self.conf[tgt_spk][:4],
+                self.writer.add_audio('val_audio_postflow/'+self.conf[src_spk][:4]+'->'+self.conf[tgt_spk][:4],
                                       val_wav[0], i+1, sample_rate=16000)
 
     def val_show_dataloader(self):
-        content = []
-        spk_emb = []
+        src_mel = []
+        spk_emb_src = []
+        spk_emb_tgt = []
         tag = []
         for i in range(1, 9, 1):
             if i < 5:       # VC
@@ -269,17 +282,27 @@ class Solver(object):
             else:           # reconstruction
                 src_spk = 'gt_audio' + str(i % 4) if i < 8 else 'gt_audio' + str(4)
                 tgt_spk = src_spk
-            content.append(torch.FloatTensor(pickle.load(open(os.path.join(
-                self.conf['content_folder'], self.conf[src_spk]+'.pkl'), 'rb'))).squeeze(0).to(self.device))
-            spk_emb.append(torch.FloatTensor(np.load(
+            src_mel.append(torch.FloatTensor(np.load(os.path.join(
+                self.conf['mel_folder'], self.conf[src_spk]+'.npy'))).squeeze(0).to(self.device))
+            spk_emb_src.append(torch.FloatTensor(np.load(
+                os.path.join(self.conf['spk_emb'], self.conf[src_spk][:-4] + '.npy'))).to(self.device))
+            spk_emb_tgt.append(torch.FloatTensor(np.load(
                 os.path.join(self.conf['spk_emb'], self.conf[tgt_spk][:-4]+'.npy'))).to(self.device))
-            tag.append(content[i-1].shape[0])
+            tag.append(src_mel[i-1].shape[0])
 
-        content_padding = pad_sequence(content, padding_value=0).permute(1, 0, 2)
-        spk_emb_padding = pad_sequence(spk_emb, padding_value=0).T
+        src_mel_padding = pad_sequence(src_mel, padding_value=0).permute(1, 0, 2)
+        src_mel_padding = torch.FloatTensor(self.pad_seq(src_mel_padding.transpose(1, 2).cpu())).to(self.device)
+        spk_emb_src_padding = pad_sequence(spk_emb_src, padding_value=0).T
+        spk_emb_tgt_padding = pad_sequence(spk_emb_tgt, padding_value=0).T
 
-        nonpadding = (content_padding.transpose(1, 2) != 0).float()[:, :].to(self.device)
+        nonpadding = (src_mel_padding != 0).float()[:, :].to(self.device)
         nonpadding = torch.mean(nonpadding, 1, keepdim=True)
         nonpadding[nonpadding > 0] = 1
 
-        return content_padding, spk_emb_padding, nonpadding, tag
+        return src_mel_padding, spk_emb_src_padding, spk_emb_tgt_padding, nonpadding, tag
+
+    def pad_seq(self, x, base=32):
+        len_out = int(base * ceil(float(x.shape[-1]) / base))
+        len_pad = len_out - x.shape[-1]
+        assert len_pad >= 0
+        return np.pad(x, ((0, 0), (0, 0), (0, len_pad)), 'constant')

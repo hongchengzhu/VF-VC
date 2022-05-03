@@ -24,10 +24,10 @@ is_training: true
 iter: 155000
 
 # model
-training_batch_size: 64
+training_batch_size: 2
 validation_batch_size: 64 # set 1 batch, sizeof 64 audios 
 num_iter: 1000000
-task: w2m-vctk
+task: w2m-vctk-5-3
 log_step: 20
 
 # continue to train
@@ -47,7 +47,7 @@ encoder_type: wn
 decoder_type: wn
 
 # wav2vec2 hidden size
-hidden_in: 1024 # content_size
+hidden_in: 320 # content_size
 hidden_out: 192 # hidden_size
 
 # enhanced prior

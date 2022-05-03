@@ -3,12 +3,81 @@ import torch.nn as nn
 from modules.VAE.fvae import FVAE
 from modules.flow.glow_modules import Glow
 import torch.distributions as dist
+import torch.nn.functional as F
+
+
+class ConvNorm(torch.nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1,
+                 padding=None, dilation=1, bias=True, w_init_gain='linear'):
+        super(ConvNorm, self).__init__()
+        if padding is None:
+            assert(kernel_size % 2 == 1)
+            padding = int(dilation * (kernel_size - 1) / 2)
+
+        self.conv = torch.nn.Conv1d(in_channels, out_channels,
+                                    kernel_size=kernel_size, stride=stride,
+                                    padding=padding, dilation=dilation,
+                                    bias=bias)
+
+        torch.nn.init.xavier_uniform_(
+            self.conv.weight, gain=torch.nn.init.calculate_gain(w_init_gain))
+
+    def forward(self, signal):
+        conv_signal = self.conv(signal)
+        return conv_signal
+
+
+class content_encoder(nn.Module):
+    """Encoder module:
+    """
+
+    def __init__(self, dim_neck, dim_emb, freq):
+        super(content_encoder, self).__init__()
+        self.dim_neck = dim_neck
+        self.freq = freq
+
+        convolutions = []
+        for i in range(3):
+            conv_layer = nn.Sequential(
+                ConvNorm(80 + dim_emb if i == 0 else 512,
+                         512,
+                         kernel_size=5, stride=1,
+                         padding=2,
+                         dilation=1, w_init_gain='relu'),
+                nn.BatchNorm1d(512))
+            convolutions.append(conv_layer)
+        self.convolutions = nn.ModuleList(convolutions)
+
+        self.lstm = nn.LSTM(512, dim_neck, 2, batch_first=True, bidirectional=True)
+
+    def forward(self, x, c_org):
+        x = x.squeeze(1).transpose(2, 1)
+        c_org = c_org.unsqueeze(-1).expand(-1, -1, x.size(-1))
+        x = torch.cat((x, c_org), dim=1)
+
+        for conv in self.convolutions:
+            x = F.relu(conv(x))
+        x = x.transpose(1, 2)
+
+        self.lstm.flatten_parameters()
+        outputs, _ = self.lstm(x)
+        out_forward = outputs[:, :, :self.dim_neck]
+        out_backward = outputs[:, :, self.dim_neck:]
+
+        codes = []
+        for i in range(0, outputs.size(1), self.freq):
+            codes.append(torch.cat((out_forward[:, i + self.freq - 1, :], out_backward[:, i, :]), dim=-1))
+
+        return codes
 
 
 class Generator(nn.Module):
     """Generator network."""
     def __init__(self, config):
         super(Generator, self).__init__()
+
+        # content encoder
+        self.content_encoder = content_encoder(32, 256, 32)
 
         # transfer the content_size to hidden_size
         self.conv = torch.nn.Conv1d(config['hidden_in'], config['hidden_out'], kernel_size=1)
@@ -39,32 +108,44 @@ class Generator(nn.Module):
         self.detach_postflow_input = config['detach_postflow_input']
         self.noise_scale = config['noise_scale']
 
-    def forward(self, tgt_mel, cond, loss, output, nonpadding, spk_emb=None, train_flag=True, infer=False, noise_scale=1.0):
+    def forward(self, src_mel, loss, output, nonpadding, spk_emb_src=None, spk_emb_tgt=None,
+                train_flag=True, infer=False, noise_scale=1.0):
         """
         Content encoder & Speaker encoder (if use) as VF-VC Encoder, and the extracted representations are concated
         as the condition of modules (VF-VC Decoder) with VP-Flow enhanced. The flow-based model is used as Post-Net to
         enrich converted mel-spectrogram details.
-        :param tgt_mel: [Batch, C_in_out, T]
-        :param cond: [B, C_g, T]
+        :param src_mel: [Batch, C_in_out, T]
         :param loss: empty dict return loss
         :param output: empty dict return output
         :param nonpadding: [B, C, T]
-        :param spk_emb: speaker embedding in multi-speaker setting
+        :param spk_emb_src: source speaker embedding in multi-speaker setting
+        :param spk_emb_tgt: target speaker embedding in multi-speaker setting
         :param train_flag: set to True
         :param infer: train or infer
         :param noise_scale: 1.0
         :return:
         """
 
-        # convert content to hidden before into vae
-        T = cond.shape[1]
-        spk_emb_padding = spk_emb.unsqueeze(1).repeat(1, T, 1)
-        cond = torch.cat([cond, spk_emb_padding], -1)
+        # content encoder
+        content = self.content_encoder(src_mel, spk_emb_src)       # mel: [B, T, H], spk_emb: [B, H]
+        if spk_emb_tgt is None:
+            return torch.cat(content, dim=-1)
+        else:
+            output['content_origin'] = torch.cat(content, dim=-1)
+
+        cond = []
+        # upsample
+        for cont in content:
+            cond.append(cont.unsqueeze(1).expand(-1, int(src_mel.size(1) / len(content)), -1))
+        cond = torch.cat(cond, dim=1)
+
+        cond = torch.cat((cond, spk_emb_tgt.unsqueeze(1).expand(-1, src_mel.size(1), -1)), dim=-1)
+
         cond = self.conv(cond.transpose(1, 2))  # condition with 192-dim, [B, H, T]
 
         # f-vae encoder
         if not infer:
-            z, kl, z_p, m_q, logs_q = self.fvae(tgt_mel, nonpadding, infer=False, cond=cond)
+            z, kl, z_p, m_q, logs_q = self.fvae(src_mel, nonpadding, infer=False, cond=cond)
             output['z'] = z
             output['z_p'] = z_p
             output['m_q'] = m_q
@@ -80,9 +161,9 @@ class Generator(nn.Module):
         if self.use_post_flow and train_flag:
             if not infer:
                 loss['postflow'], output['z_postflow'] = self.run_post_flow(
-                    tgt_mel, cond, nonpadding, infer, output, loss)
+                    src_mel, cond, nonpadding, infer, output, loss)
             else:
-                output['recon_post_flow'] = self.run_post_flow(tgt_mel, cond, nonpadding, infer, output, loss)
+                output['recon_post_flow'] = self.run_post_flow(src_mel, cond, nonpadding, infer, output, loss)
         return loss, output
 
     def run_post_flow(self, tgt_mel, cond, nonpadding, infer, output, loss):
