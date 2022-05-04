@@ -148,7 +148,7 @@ class Solver(object):
                 self.mse_loss(output['recon_vae'].transpose(1, 2), src_mel) / (80 * sum(nonpadding[nonpadding == 1]))
 
             # code loss
-            content_recon = self.G(src_mel.transpose(1, 2), spk_emb_src=spk_emb, spk_emb_tgt=None,
+            content_recon = self.G(output['recon_vae'], spk_emb_src=spk_emb, spk_emb_tgt=None,
                                   loss=loss, output=output, nonpadding=nonpadding, train_flag=self.train_flag)
             loss['content_recon'] = self.mse_loss(output['content_origin'], content_recon) / content_recon.numel()
 
@@ -216,7 +216,7 @@ class Solver(object):
                                       loss=val_loss, output=val_output,
                                       nonpadding=val_nonpadding, infer=True, train_flag=train_flag)
         # code loss
-        content_recon = self.G(src_mel=val_mel.transpose(1, 2), spk_emb_src=spk_emb, spk_emb_tgt=None,
+        content_recon = self.G(src_mel=val_output['recon_vae'], spk_emb_src=spk_emb, spk_emb_tgt=None,
                                loss=val_loss, output=val_output, nonpadding=val_nonpadding, train_flag=train_flag)
 
         # compute l1 loss for 3 outputs
