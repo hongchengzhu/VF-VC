@@ -38,7 +38,7 @@ encoder_type: wn
 decoder_type: wn
 
 # wav2vec2 hidden size
-hidden_in: 768 # content_size
+hidden_in: 1024 # content_size
 hidden_out: 192 # hidden_size
 
 # enhanced prior

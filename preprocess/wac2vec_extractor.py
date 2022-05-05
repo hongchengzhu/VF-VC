@@ -2,12 +2,15 @@
 import os
 import torch
 import pickle
+import numpy as np
 import s3prl.hub as hub
 import soundfile as sf
 from tqdm import tqdm
 import threading
-from mel_hifigan import mel_hifigan_extractor
-import numpy as np
+import sys
+sys.path.append('/home/hongcz/alab/code')
+print(sys.path)
+from hifi_gan_master.meldataset import mel_spectrogram
 
 
 device = 'cuda:0'
@@ -17,60 +20,79 @@ wav2vec_model = wav2vec_model.to(device)
 
 
 root = '/home/hongcz/alab/data/VCTK-Corpus/wav16'
-target = '/home/hongcz/alab/feature/wav2vec2_padding_VCTK/'
-if not os.path.exists(target):
-    os.mkdir(target)
+content_target = '/home/hongcz/alab/feature/wav2vec2_VCTK1/'
+mel_target = '/home/hongcz/alab/feature/mel_VCTK1/'
+
+if not os.path.exists(content_target):
+    os.mkdir(content_target)
+
+if not os.path.exists(mel_target):
+    os.mkdir(mel_target)
 
 global spklist
 spklist = sorted(os.listdir(root))
 
 
-def extract_wav2vec2(index):
-    with torch.no_grad():
-        spk = spklist[index]
-        src = os.path.join(root, spk)
-        wav_list = os.listdir(src)
-        for wavname in tqdm(wav_list):
-            wav, _ = sf.read(os.path.join(src, wavname))
-            wav = torch.tensor(wav, dtype=torch.float32).to(device).unsqueeze(0)
-            ret = wav2vec_model(wav)['last_hidden_state']
-            ret = ret.cpu()
-            tag = ret.shape[1] % 4
+def extract_feature(index):
+        with torch.no_grad():
+            spk = spklist[index]
+            src = os.path.join(root, spk)
+            wav_list = sorted(os.listdir(src))
+            for wavname in tqdm(wav_list):
+                wav, _ = sf.read(os.path.join(src, wavname))
+                # 1. content feature extract
+                wav = torch.tensor(wav, dtype=torch.float32).to(device).unsqueeze(0)
+                ret = wav2vec_model(wav)['last_hidden_state']
+                ret = ret.cpu()
+                content_tag = ret.shape[1] % 4
 
-            mel_tgt, mel = mel_hifigan_extractor(index)
-            mel_len = mel.shape[0]
+                if content_tag != 0:
+                    ret_padding = torch.zeros([1, ret.shape[1] + (4 - content_tag), 768])
+                    ret_padding[:, :ret.shape[1], :] = ret
+                else:
+                    ret_padding = ret
 
-            if tag != 0:
-                ret_padding = torch.zeros([1, ret.shape[1] + (4 - tag), 768])
-                ret_padding[:, :ret.shape[1], :] = ret
-            else:
-                ret_padding = ret
-            if mel_len > ret_padding.shape[1]:
-                mel = mel[:ret_padding.shape[1], :]
-            else:
-                ret_padding = ret_padding[:, :mel_len, :]
+                # 2. mel feature extract
+                mel = mel_spectrogram(wav, 400, 80, 16000, 320, 400, 0, 8000, center=False)
+                # save spect
+                mel = mel.transpose(1, 2).squeeze(0).cpu().numpy().astype(np.float32)
+                mel_tag = mel.shape[0] % 4
+                if mel_tag != 0:
+                    mel_padding = np.zeros([mel.shape[0] + (4 - mel_tag), 80])
+                    mel_padding[:mel.shape[0], :] = mel
+                else:
+                    mel_padding = mel
 
-            tgt = os.path.join(target, spk)
-            if not os.path.exists(tgt):
-                os.mkdir(tgt)
+                # 3. forced alignment
+                if ret_padding.shape[1] > mel_padding.shape[0]:
+                    ret_padding = ret_padding[:, :mel_padding.shape[0], :]
+                elif ret_padding.shape[1] < mel_padding.shape[0]:
+                    mel_padding = mel_padding[:ret_padding.shape[1], :]
 
-            to_name = os.path.join(tgt, wavname[:-4] + '.pkl')
-            with open(to_name, 'wb') as f:
-                pickle.dump(ret_padding, f)
+                content_tgt = os.path.join(content_target, spk)
+                mel_tgt = os.path.join(mel_target, spk)
+                if not os.path.exists(content_tgt):
+                    os.mkdir(content_tgt)
+                if not os.path.exists(mel_tgt):
+                    os.mkdir(mel_tgt)
 
-            np.save(os.path.join(mel_tgt, wavname[:-4]), mel.astype('float32'), allow_pickle=False)
+                content_to_name = os.path.join(content_tgt, wavname[:-4] + '.pkl')
+                with open(content_to_name, 'wb') as f:
+                    pickle.dump(ret_padding, f)
+                mel_to_name = os.path.join(mel_tgt, wavname[:-4])
+                np.save(mel_to_name, mel_padding.astype('float32'), allow_pickle=False)
         print(1)
 
 
 for i in range(0, 109, 8):
-    t1 = threading.Thread(target=extract_wav2vec2, args=(i, ))
-    t2 = threading.Thread(target=extract_wav2vec2, args=(i+1, ))
-    t3 = threading.Thread(target=extract_wav2vec2, args=(i+2, ))
-    t4 = threading.Thread(target=extract_wav2vec2, args=(i+3, ))
-    t5 = threading.Thread(target=extract_wav2vec2, args=(i+4, ))
-    t6 = threading.Thread(target=extract_wav2vec2, args=(i+5, ))
-    t7 = threading.Thread(target=extract_wav2vec2, args=(i+6, ))
-    t8 = threading.Thread(target=extract_wav2vec2, args=(i+7, ))
+    t1 = threading.Thread(target=extract_feature, args=(i, ))
+    t2 = threading.Thread(target=extract_feature, args=(i+1, ))
+    t3 = threading.Thread(target=extract_feature, args=(i+2, ))
+    t4 = threading.Thread(target=extract_feature, args=(i+3, ))
+    t5 = threading.Thread(target=extract_feature, args=(i+4, ))
+    t6 = threading.Thread(target=extract_feature, args=(i+5, ))
+    t7 = threading.Thread(target=extract_feature, args=(i+6, ))
+    t8 = threading.Thread(target=extract_feature, args=(i+7, ))
 
     t1.start()
     t2.start()

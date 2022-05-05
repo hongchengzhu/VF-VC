@@ -13,8 +13,26 @@ import sys
 sys.path.append('/home/hongcz/alab/code')
 print(sys.path)
 from hifi_gan_master.meldataset import mel_spectrogram
+import pickle
 
 
+mel1 = np.load('/home/hongcz/alab/feature/mel_VCTK1/p227/p227_003.npy')
+mel2 = np.load('/home/hongcz/alab/feature/mel_VCTK1/p228/p228_004.npy')
+
+wav1 = sf.read('/home/hongcz/alab/data/VCTK-Corpus/wav16/p227/p227_003.wav')[0]
+wav2 = sf.read('/home/hongcz/alab/data/VCTK-Corpus/wav16/p228/p228_004.wav')[0]
+
+x1 = torch.FloatTensor(wav1).unsqueeze(0)
+mel1_hat = mel_spectrogram(x1, 400, 80, 16000, 320, 400, 0, 8000, center=False)
+
+x2 = torch.FloatTensor(wav2).unsqueeze(0)
+mel2_hat = mel_spectrogram(x2, 400, 80, 16000, 320, 400, 0, 8000, center=False)
+
+content1 = pickle.load(open('/home/hongcz/alab/feature/wav2vec2_VCTK1/p227/p227_003.pkl', 'rb'))
+content2 = pickle.load(open('/home/hongcz/alab/feature/wav2vec2_VCTK1/p228/p228_004.pkl', 'rb'))
+
+
+print(1)
 def plot_spectrogram(spectrogram):
     fig, ax = plt.subplots(figsize=(10, 2)) # mel [80,T]
     im = ax.imshow(spectrogram, aspect="auto", origin="lower",

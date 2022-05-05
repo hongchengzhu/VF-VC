@@ -13,7 +13,7 @@ class validation(object):
         """
         self.config = {}
         # hifigan
-        self.hifigan_checkpoint = '/home/hongcz/alab/code/hifi_gan_master/cp_hifigan/g_00445000'
+        self.hifigan_checkpoint = 'checkpoint/hifigan/g_00240000'
 
         self.config_file = os.path.join(os.path.split(self.hifigan_checkpoint)[0], 'config.json')
         with open(self.config_file) as f:
@@ -41,7 +41,7 @@ class validation(object):
     def load_checkpoint(self, filepath, device):
         assert os.path.isfile(filepath)
         print("Loading '{}'".format(filepath))
-        checkpoint_dict = torch.load(filepath, map_location=device)
+        checkpoint_dict = torch.load(filepath, map_location={'cuda:1': 'cuda:0'})
         print("Complete.")
         return checkpoint_dict
 
