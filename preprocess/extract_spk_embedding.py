@@ -16,49 +16,66 @@ for key, val in c_checkpoint['model_b'].items():
     new_key = key[7:]
     new_state_dict[new_key] = val
 C.load_state_dict(new_state_dict)
-num_uttrs = 10
+num_uttrs = 3
 len_crop = 128
 
 # Directory containing mel-spectrograms
-rootDir = '/home/hongcz/alab/feature/mel_hifigan_padding_alignment_VCTK'
-targetDir = '/home/hongcz/alab/feature/speaker_embedding_VCTK'
+rootDir = '/home/hongcz/alab/code/VF-VC-5-1/id_test/mel'
+targetDir = '/home/hongcz/alab/code/VF-VC-5-1/id_test'
 if not os.path.exists(targetDir):
     os.mkdir(targetDir)
-dirName, subdirList, _ = next(os.walk(rootDir))
-sorted(dirName)
-sorted(subdirList)
-print('Found directory: %s' % dirName)
+subdirList = sorted(os.listdir(rootDir))
 
 
 def spk_embedding(index):
+    cnt = 0
     speaker = subdirList[index]
     print('Processing speaker: %s' % speaker)
-    _, _, fileList = next(os.walk(os.path.join(dirName, speaker)))
+    fileList = sorted(os.listdir(os.path.join(rootDir, speaker)))
     
     # make speaker embedding
     assert len(fileList) >= num_uttrs
     idx_uttrs = np.random.choice(len(fileList), size=num_uttrs, replace=False)
     embs = []
     for i in range(num_uttrs):
-        tmp = np.load(os.path.join(dirName, speaker, fileList[idx_uttrs[i]]))
+        tmp = np.load(os.path.join(rootDir, speaker, fileList[idx_uttrs[i]]))
         candidates = np.delete(np.arange(len(fileList)), idx_uttrs)
         # choose another utterance if the current one is too short
         while tmp.shape[0] <= len_crop:
+            cnt += 1
+            print(tmp.shape)
             idx_alt = np.random.choice(candidates)
-            tmp = np.load(os.path.join(dirName, speaker, fileList[idx_alt]))
+            tmp = np.load(os.path.join(rootDir, speaker, fileList[idx_alt]))
             candidates = np.delete(candidates, np.argwhere(candidates==idx_alt))
         left = np.random.randint(0, tmp.shape[0]-len_crop)
         melsp = torch.from_numpy(tmp[np.newaxis, left:left+len_crop, :]).cuda()
         emb = C(melsp)
         embs.append(emb.detach().squeeze().cpu().numpy())     
 
-    tgt = os.path.join(targetDir, speaker)
-    if not os.path.exists(tgt):
-        os.mkdir(tgt)
-    np.save(os.path.join(tgt, speaker), np.mean(embs, axis=0).astype('float32'), allow_pickle=False)
+    # tgt = os.path.join(targetDir, speaker+'_ge2e.txt')
+    # if not os.path.exists(tgt):
+    #     os.mkdir(tgt)
+    # np.save(os.path.join(tgt, speaker), np.mean(embs, axis=0).astype('float32'), allow_pickle=False)
+
+    # np.savetxt(tgt, np.mean(embs, axis=0), fmt='%f',
+    #            delimiter=',')
+    return embs
 
 
-for i in range(0, 109, 4):
+tmp = spk_embedding(0)
+tmp = np.array(tmp)
+np.savetxt('/home/hongcz/alab/code/VF-VC-5-1/id_test/spk_emb/ge2e_p225_3.txt', tmp, fmt='%f',
+           delimiter=',')
+
+spk_emb = np.zeros([200, 256])
+for i in range(0, 2, 1):
+    tmp = spk_embedding(i)
+    for j in range(0, 1, 1):
+        spk_emb[100*i+j, :] = tmp[j]
+np.savetxt('/home/hongcz/alab/code/VF-VC-5-1/id_test/spk_emb/ge2e_infer_postflow.txt', spk_emb, fmt='%f', delimiter=',')
+
+
+for i in range(0, 2, 2):
     t1 = threading.Thread(target=spk_embedding, args=(i, ))
     t2 = threading.Thread(target=spk_embedding, args=(i+1, ))
     t3 = threading.Thread(target=spk_embedding, args=(i+2, ))
